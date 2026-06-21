@@ -9,8 +9,6 @@ RLangit ("we," "us," or "our") operates the Finance Tracker mobile application (
 ### 1.1 Personal Data
 The App uses **Firebase Authentication** and **Google Sign-In** to manage your account. When you sign in, we may collect:
 *   Your Email Address
-*   Your Name
-*   Your Profile Picture (for display within the App only)
 
 ### 1.2 Financial Data
 The App is designed to help you track finances. Financial records (income, expenses, savings goals) are stored:
@@ -41,4 +39,4 @@ You can delete your account and all associated data at any time by contacting us
 
 ## 6. Contact Us
 If you have any questions about this Privacy Policy, please contact us at:
-[Your Email or GitHub Profile Link]
+raditya.langit08@gmail.com

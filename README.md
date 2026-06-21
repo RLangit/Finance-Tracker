@@ -5,7 +5,7 @@ Manage your money with ease using a sleek, modern, and intuitive financial compa
 ## ✨ What this app offers:
 
 ### 🎯 Set Aside Your 'Tabungan' (Savings Goals)
-Don't just save—save with a purpose. Create specific savings targets (e.g., "beli parfum") and track your progress in real-time. See exactly how much you've collected and how close you are to your goal with visual progress bars.
+Don't just save—save with a purpose. Create specific savings targets (e.g., "Beli Parfum Mykonos") and track your progress in real-time. See exactly how much you've collected and how close you are to your goal with visual progress bars.
 
 ### 📊 Comprehensive Cash Flow Analysis
 Understand your monthly financial health with clear, interactive charts.
@@ -14,7 +14,7 @@ Understand your monthly financial health with clear, interactive charts.
 - **Rincian Kategori**: See exactly where your money goes with category-wise distribution (e.g., Food & Drinks, Transportation).
 
 ### 💳 Manage Multiple Payment Methods
-Keep track of your money across different platforms. Whether it's **Dana**, **Wondr**, or Cash, you can categorize every transaction by its payment source to maintain an accurate balance across all your digital and physical wallets.
+Keep track of your money across different platforms. Whether it's **Dana**, **Gopay**, or Cash, you can categorize every transaction by its payment source to maintain an accurate balance across all your digital and physical wallets.
 
 ### 📝 Seamless Transaction Tracking
 Never lose track of a single Rupiah.

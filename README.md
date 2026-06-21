@@ -26,21 +26,3 @@ Never lose track of a single Rupiah.
 Never lose your data. Sync your financial records securely with your Google Account, allowing you to restore your data whenever you switch devices.
 
 ---
-
-## 🛠 Built with Modern Technology
-- **Jetpack Compose**: For a smooth and responsive "GoPay-style" dark UI.
-- **Room Database**: For fast, reliable local data storage.
-- **Firebase Auth & Firestore**: For secure user accounts and effortless cloud backups.
-- **Advanced Security**: Implements Email Enumeration Protection and robust password policies.
-
-## 🚀 Getting Started
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/RLangit/Finance-Tracker.git
-   ```
-2. **Setup Firebase**: Add your `google-services.json` to the `app/` folder.
-3. **Build and Run**: Open in Android Studio and deploy to your device.
-
----
-Built with ❤️ by [RLangit](https://github.com/RLangit)

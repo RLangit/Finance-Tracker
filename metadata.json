@@ -1,0 +1,6 @@
+{
+  "name": "Finance Tracker",
+  "description": "A sleek budgeting app styled like GoPay with Wondr's high-fidelity local data dashboards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

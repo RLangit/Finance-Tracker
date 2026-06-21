@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Finance Tracker</string>
+    <!-- Placeholder for Google Sign-In. This is normally generated from google-services.json -->
+    <!-- You can find your Web Client ID in the Firebase Console -> Project Settings -> SDK setup and configuration -->
+    <string name="default_web_client_id">951831920898-b3tt7ikn26ocpan1bme5at1l6rr48bd8.apps.googleusercontent.com</string>
+</resources>
+
+

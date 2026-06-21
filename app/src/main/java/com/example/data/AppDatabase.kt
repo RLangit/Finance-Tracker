@@ -1,0 +1,30 @@
+package com.example.data
+
+import android.content.Context
+import androidx.room.*
+
+@Database(entities = [Transaction::class, SavingsGoal::class, MetaItem::class], version = 4, exportSchema = false)
+abstract class AppDatabase : RoomDatabase() {
+    abstract fun transactionDao(): TransactionDao
+    abstract fun savingsGoalDao(): SavingsGoalDao
+    abstract fun metaItemDao(): MetaItemDao
+
+    companion object {
+        @Volatile
+        private var INSTANCE: AppDatabase? = null
+
+        fun getDatabase(context: Context): AppDatabase {
+            return INSTANCE ?: synchronized(this) {
+                val instance = Room.databaseBuilder(
+                    context.applicationContext,
+                    AppDatabase::class.java,
+                    "gopay_budget_db"
+                )
+                    .fallbackToDestructiveMigration()
+                    .build()
+                INSTANCE = instance
+                instance
+            }
+        }
+    }
+}

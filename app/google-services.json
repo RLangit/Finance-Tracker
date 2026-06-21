@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "951831920898",
+    "project_id": "finance-tracker-72697",
+    "storage_bucket": "finance-tracker-72697.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:951831920898:android:213fdc58916d6d554f421b",
+        "android_client_info": {
+          "package_name": "com.kai.financetracker"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "951831920898-p6ch81larqt8fepnse0bm1fbq1cipma8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.kai.financetracker",
+            "certificate_hash": "ea48ba18e1d6264198f45fa8335467a217858624"
+          }
+        },
+        {
+          "client_id": "951831920898-b3tt7ikn26ocpan1bme5at1l6rr48bd8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyATKmBPRrYhxKUTmsgHAvPzlpt9sJwEDj4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "951831920898-b3tt7ikn26ocpan1bme5at1l6rr48bd8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -26,3 +26,4 @@ Never lose track of a single Rupiah.
 Never lose your data. Sync your financial records securely with your Google Account, allowing you to restore your data whenever you switch devices.
 
 ---
+Built with ❤️ by [RLangit](https://github.com/RLangit) | [Privacy Policy](PRIVACY_POLICY.md)

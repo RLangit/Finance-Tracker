@@ -14,5 +14,14 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Keystores and sensitive files
+*.jks
+*.keystore
+*.p12
+google-services.json
+
+# Environment variables
 .env
-debug.keystore
+.env.*
+!.env.example

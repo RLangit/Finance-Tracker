@@ -559,7 +559,7 @@ fun DashboardScreen(
             if (transactions.isEmpty()) {
                 item {
                     Text(
-                        text = "Belum ada transaksi di bulan ini. Coba tambahkan manual sekaran atau gunakan panel Simulator di menu Profil untuk memicu trigger transfer Dana / Wondr otomatis!",
+                        text = "Belum ada transaksi di bulan ini. Coba tambahkan manual sekarang!",
                         color = Color.Gray,
                         fontSize = 13.sp,
                         modifier = Modifier

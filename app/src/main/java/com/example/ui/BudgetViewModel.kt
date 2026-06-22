@@ -6,7 +6,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.*
-import com.example.service.BudgetNotificationListener
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.FirebaseFirestore
@@ -464,47 +463,4 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
-
-    // Notification listener helpers & system simulation
-    fun triggerSimulationNotification(source: String) {
-        val context = getApplication<Application>()
-        viewModelScope.launch(Dispatchers.Default) {
-            when (source) {
-                "dana_jajan" -> {
-                    BudgetNotificationListener.simulateIncomingNotification(
-                        context,
-                        "id.dana",
-                        "Dana Payment",
-                        "Transaksi berhasil! Pembayaran sebesar Rp 35.000 ke Geprek Gacoan sukses."
-                    )
-                }
-                "wondr_makan" -> {
-                    BudgetNotificationListener.simulateIncomingNotification(
-                        context,
-                        "id.co.bni.wondr",
-                        "wondr BNI",
-                        "Transfer berhasil Rp 120.000 untuk pembelian Excelso Coffee."
-                    )
-                }
-                "dana_topup" -> {
-                    BudgetNotificationListener.simulateIncomingNotification(
-                        context,
-                        "id.dana",
-                        "Dana Top Up",
-                        "Top up saldo Rp 200.000 dari Transfer ATM berhasil masuk ke akun DANA Anda!"
-                    )
-                }
-                "wondr_gaji" -> {
-                    BudgetNotificationListener.simulateIncomingNotification(
-                        context,
-                        "id.co.bni.wondr",
-                        "wondr BNI Payroll",
-                        "Pemasukan diterima! Kredit gaji bulanan sebesar Rp 4.500.000 masuk."
-                    )
-                }
-            }
-        }
-    }
-
-
 }

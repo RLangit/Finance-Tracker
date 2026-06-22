@@ -289,61 +289,6 @@ fun ProfileScreen(
             }
         }
 
-        // Feature 2: Auto-import from other wallets configuration
-        item {
-            Text(
-                text = "Auto-Sync Integrasi Dompet (Dana / Wondr)",
-                color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, OutlineVariant, RoundedCornerShape(16.dp)),
-                colors = CardDefaults.cardColors(containerColor = GoPayNavy),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Cara Kerja Auto-Sync:",
-                            color = Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(WondrEmeraldGreen.copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                "AKTIF",
-                                color = WondrEmeraldGreen,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Aplikasi akan mendengarkan (listen) push notification transaksi dari Dana & Wondr. Notifikasi akan diproses otomatis dan disimpan ke database lokal tanpa perlu input manual!",
-                        color = Color.Gray,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp
-                    )
-                }
-            }
-        }
-
         item {
             Text(
                 text = "Area Berbahaya",

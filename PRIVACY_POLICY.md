@@ -15,16 +15,9 @@ The App is designed to help you track finances. Financial records (income, expen
 *   **Locally:** On your device using an encrypted Room database.
 *   **Cloud (Optional):** If synced, your data is stored in **Firebase Firestore**, tied to your unique user ID. This data is not shared with third parties.
 
-### 1.3 Notification Listener Service
-The App includes an optional feature to sync transactions from notifications (e.g., Dana, Wondr).
-*   **Permissions:** This requires the `BIND_NOTIFICATION_LISTENER_SERVICE` permission.
-*   **Usage:** The App only reads notifications from specific financial apps you authorize. It extracts transaction amounts and descriptions locally to update your records.
-*   **Privacy:** This data is processed on-device and is never sent to our servers except for your personal cloud backup if enabled.
-
 ## 2. Permissions Used
 *   `INTERNET`: Required for Firebase Sync and Authentication.
-*   `POST_NOTIFICATIONS`: Required to show alerts and maintain service status.
-*   `BIND_NOTIFICATION_LISTENER_SERVICE`: Required for the auto-sync feature.
+*   `POST_NOTIFICATIONS`: Required to show alerts.
 
 ## 3. Data Security
 We implement industry-standard security measures, including Firebase security rules, to ensure your cloud data is only accessible by you.

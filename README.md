@@ -4,26 +4,33 @@ Manage your money with ease using a sleek, modern, and intuitive financial compa
 
 ## ✨ What this app offers:
 
+### 💰 Monthly Budgeting & Expense Limits
+Take control of your spending habits with the new Category-Based Budgeting system.
+- **Smart Limits**: Set monthly spending limits for each category (e.g., Food, Transport) using fixed Rupiah amounts or percentages of your balance.
+- **Over-Budget Warnings**: Get instant popup notifications if an expense exceeds your set limit, showing exactly how much you've gone over.
+- **Visual Progress**: Track your spending in real-time with dynamic progress bars that accurately reflect your monthly usage.
+
+### 📊 Comprehensive Financial Analysis
+Understand your financial health with clear, interactive visualizations on the **Keuangan** page.
+- **Cash Flow Chart**: Compare your Income vs. Expenses visually to see your monthly surplus or deficit.
+- **Detailed Rekap**: Get a breakdown of your total Pemasukan, Tabungan, and Pengeluaran for any given month.
+- **Category Distribution**: See exactly where your money goes with detailed charts and transaction rincian.
+
 ### 🎯 Set Aside Your 'Tabungan' (Savings Goals)
-Don't just save—save with a purpose. Create specific savings targets (e.g., "Beli Parfum Mykonos") and track your progress in real-time. See exactly how much you've collected and how close you are to your goal with visual progress bars.
+Don't just save—save with a purpose. Create specific savings targets and track your progress in real-time with visual progress bars.
 
-### 📊 Comprehensive Cash Flow Analysis
-Understand your monthly financial health with clear, interactive charts.
-- **Arus Kas Bulanan**: Compare your Income vs. Expenses visually.
-- **Rekap Keuangan**: Get a detailed breakdown of your total Pemasukan, Tabungan, and Pengeluaran.
-- **Rincian Kategori**: See exactly where your money goes with category-wise distribution (e.g., Food & Drinks, Transportation).
+### 💳 Money Distribution & Privacy
+Keep track of your assets across different platforms like **Dana**, **Gopay**, or Cash.
+- **Always Visible Charts**: See your wallet distribution at a glance on the homepage.
+- **Privacy First**: Exact amounts are masked by default and can be toggled with a single tap, keeping your detailed finances private in public spaces.
 
-### 💳 Manage Multiple Payment Methods
-Keep track of your money across different platforms. Whether it's **Dana**, **Gopay**, or Cash, you can categorize every transaction by its payment source to maintain an accurate balance across all your digital and physical wallets.
-
-### 📝 Seamless Transaction Tracking
-Never lose track of a single Rupiah.
-- **History View**: Search and filter through your transaction history by date, type, or payment method.
-- **Smart Labels**: Automatically see which wallet was used and the percentage of spending each category represents.
-- **Real-time Updates**: Balance and stats update instantly as you add or edit transactions.
+### 📝 Seamless Tracking & Formatting
+- **History View**: Search and filter through your transaction history with ease.
+- **Smart Formatting**: All Rupiah values are automatically formatted with thousands separators (e.g., `Rp 50.000`) for superior readability.
+- **Real-time Updates**: Your balance and stats update instantly as you manage your money.
 
 ### ☁️ Secure Cloud Backup
-Never lose your data. Sync your financial records securely with your Google Account, allowing you to restore your data whenever you switch devices.
+Sync your financial records securely with your Google Account, allowing you to restore your data whenever you switch devices.
 
 ---
 [Privacy Policy](PRIVACY_POLICY.md)

@@ -33,6 +33,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import com.example.data.*
 import com.example.ui.BudgetViewModel
 import com.example.ui.theme.*
@@ -94,9 +97,9 @@ fun CustomActionDialog(
     confirmColor: Color = GoPayBrightTeal,
     onConfirm: () -> Unit,
     dismissText: String = "Batal",
-    onDismiss: () -> Unit
+    onDismiss: (() -> Unit)? = null
 ) {
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = { onDismiss?.invoke() ?: onConfirm() }) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -145,10 +148,10 @@ fun CustomActionDialog(
                     )
                 }
                 
-                if (dismissText != "Batal") {
+                if (dismissText != "Batal" && dismissText.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Button(
-                        onClick = onDismiss,
+                        onClick = { onDismiss?.invoke() },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp),
@@ -166,13 +169,14 @@ fun CustomActionDialog(
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                TextButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Batal", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                if (onDismiss != null) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    TextButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (dismissText == "Batal") "Batal" else dismissText, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
                 }
             }
         }
@@ -199,6 +203,7 @@ fun DashboardScreen(
     var selectedGoalForTopup by remember { mutableStateOf<com.example.data.SavingsGoal?>(null) }
     
     val metaItems by viewModel.metaItems.collectAsState()
+    val budgetLimits by viewModel.budgetLimits.collectAsState()
 
     // Computations
     val currentMonthTransactions = remember(transactions) {
@@ -229,6 +234,39 @@ fun DashboardScreen(
     val currentBalance = remember(transactions) {
         transactions.filter { it.type == TransactionType.PEMASUKAN }.sumOf { it.amount } - 
         transactions.filter { it.type == TransactionType.PENGELUARAN }.sumOf { it.amount }
+    }
+
+    val allTimeMethodStats = remember(transactions) {
+        val methodTotals = mutableMapOf<String, Double>()
+        transactions.forEach { tx ->
+            if (tx.category == "Tabungan") return@forEach
+            
+            if (tx.type == TransactionType.TRANSFER) {
+                // source account
+                val outCurrent = methodTotals[tx.paymentMethod] ?: 0.0
+                methodTotals[tx.paymentMethod] = outCurrent - tx.amount
+                // destination account (saved in tx.category)
+                val inCurrent = methodTotals[tx.category] ?: 0.0
+                methodTotals[tx.category] = inCurrent + tx.amount
+            } else {
+                val current = methodTotals[tx.paymentMethod] ?: 0.0
+                if (tx.type == TransactionType.PEMASUKAN) {
+                    methodTotals[tx.paymentMethod] = current + tx.amount
+                } else if (tx.type == TransactionType.PENGELUARAN) {
+                    methodTotals[tx.paymentMethod] = current - tx.amount
+                }
+            }
+        }
+        val totalPositive = methodTotals.values.sumOf { if (it > 0) it else 0.0 }
+        methodTotals.map { (method, sum) ->
+            CategoryReportItem(
+                category = method,
+                amount = sum,
+                percentage = if (sum > 0 && totalPositive > 0) (sum / totalPositive * 100) else 0.0,
+                count = 0, // Not needed for homepage distribution
+                transactions = emptyList()
+            )
+        }.filter { it.amount != 0.0 }.sortedByDescending { it.amount }
     }
 
     val methodBalances = remember(transactions) {
@@ -265,6 +303,7 @@ fun DashboardScreen(
     var recentAnimType by remember { mutableStateOf<TransactionType?>(null) }
     val scope = rememberCoroutineScope()
     var achievedGoalPopupName by remember { mutableStateOf<String?>(null) }
+    var exceededBudgetInfo by remember { mutableStateOf<Triple<String, Double, Double>?>(null) } // Category, Amount, Percent
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -399,6 +438,58 @@ fun DashboardScreen(
                                     )
                                 }
                             }
+
+                            // Money Distribution Section (Always Visible, only amounts masked)
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 16.dp)
+                                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp)),
+                                colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.1f)),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        text = "Money Distribution",
+                                        color = Color.White,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Pie Chart
+                                        Box(modifier = Modifier.size(100.dp)) {
+                                            DonutChart(items = allTimeMethodStats, colorProvider = ::getCategoryColor)
+                                        }
+                                        
+                                        Spacer(modifier = Modifier.width(24.dp))
+                                        
+                                        // Legend/Rincian
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            allTimeMethodStats.take(4).forEach { stat ->
+                                                val color = getCategoryColor(stat.category)
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(color))
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Text(
+                                                        text = "${stat.category} (${String.format("%.1f%%", stat.percentage)}): " + if (isBalanceVisible) "Rp ${String.format("%,.0f", stat.amount).replace(",", ".")}" else "Rp ••••••••",
+                                                        color = Color.White.copy(alpha = 0.8f),
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                            }
+                                            if (allTimeMethodStats.size > 4) {
+                                                Text("...", color = Color.Gray, fontSize = 11.sp)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -414,112 +505,9 @@ fun DashboardScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(top = 16.dp, bottom = 80.dp)
             ) {
-            // Dashboard Data Analytics Card (Wondr style)
+            // Dashboard Data Analytics Card (REMOVED Arus Kas Bulanan)
             item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, OutlineVariant, RoundedCornerShape(16.dp)),
-                    colors = CardDefaults.cardColors(containerColor = GoPayNavy),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Arus Kas Bulanan",
-                                color = Color.White,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Selisih: Rp ${String.format("%,.0f", monthlySelisih).replace(",", ".")}",
-                            color = if (monthlySelisih >= 0) WondrLimeAccent else WondrCoralRed,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.align(Alignment.CenterHorizontally)
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Custom Double Bar Chart Comparing Monthly Income vs Expenses (Indonesian Labels)
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(160.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            DoubleBarChart(
-                                income = monthlyIncome,
-                                expense = monthlyExpense
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Numeric Metrics Comparison
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(WondrEmeraldGreen)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Pemasukan", color = Color.Gray, fontSize = 12.sp)
-                                }
-                                Text(
-                                    text = "Rp ${String.format("%,.0f", totalIncome).replace(",", ".")}",
-                                    color = Color.White,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-
-                            Divider(
-                                modifier = Modifier
-                                    .height(30.dp)
-                                    .width(1.dp)
-                                    .align(Alignment.CenterVertically),
-                                color = OutlineVariant
-                            )
-
-                            Column(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(start = 16.dp)
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(WondrCoralRed)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Pengeluaran", color = Color.Gray, fontSize = 12.sp)
-                                }
-                                Text(
-                                    text = "Rp ${String.format("%,.0f", totalExpense).replace(",", ".")}",
-                                    color = Color.White,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-                }
+                Spacer(modifier = Modifier.height(0.dp))
             }
 
 
@@ -682,6 +670,28 @@ fun DashboardScreen(
             metaItems = metaItems,
             onDismiss = { showAddDialog = false },
             onSave = { type, amount, method, category, note ->
+                // Check Budget Limit for Expense
+                if (type == TransactionType.PENGELUARAN) {
+                    val limit = budgetLimits.find { it.methodName == category }
+                    if (limit != null) {
+                        val spentThisMonth = currentMonthTransactions
+                            .filter { it.category == category && it.type == TransactionType.PENGELUARAN }
+                            .sumOf { it.amount }
+                        
+                        val calculatedLimit = if (limit.limitPercentage != null) {
+                            (limit.limitPercentage / 100.0) * currentBalance
+                        } else {
+                            limit.limitAmount ?: 0.0
+                        }
+
+                        if (calculatedLimit > 0 && (spentThisMonth + amount) > calculatedLimit) {
+                            val overAmt = (spentThisMonth + amount) - calculatedLimit
+                            val overPct = (overAmt / calculatedLimit) * 100.0
+                            exceededBudgetInfo = Triple(category, overAmt, overPct)
+                        }
+                    }
+                }
+
                 val matchingGoal = allGoals.find { it.name.equals(note, ignoreCase = true) && it.targetAmount == amount }
                 if (type == TransactionType.PENGELUARAN && matchingGoal != null) {
                     viewModel.deleteSavingsGoalDirectly(matchingGoal)
@@ -845,6 +855,19 @@ fun DashboardScreen(
             containerColor = GoPayNavy,
             titleContentColor = WondrEmeraldGreen,
             textContentColor = Color.White
+        )
+    }
+
+    exceededBudgetInfo?.let { (cat, amt, pct) ->
+        CustomActionDialog(
+            title = "Melebihi Limit Anggaran!",
+            message = "Pengeluaran untuk kategori '$cat' telah melebihi limit yang ditentukan.\n\n" +
+                      "Kelebihan: Rp ${String.format("%,.0f", amt).replace(",", ".")}\n" +
+                      "Persentase: ${String.format("%.1f", pct)}% di atas limit.",
+            confirmText = "Sip, Lanjutkan",
+            confirmColor = GoPayBrightTeal,
+            onConfirm = { exceededBudgetInfo = null },
+            onDismiss = null
         )
     }
 }

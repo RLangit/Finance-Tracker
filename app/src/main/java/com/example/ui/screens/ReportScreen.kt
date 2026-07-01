@@ -27,11 +27,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.Transaction
 import com.example.data.TransactionType
+import com.example.data.BudgetLimit
 import com.example.ui.BudgetViewModel
 import com.example.ui.theme.*
 import java.util.*
 
-enum class ReportTab { PEMASUKAN, PENGELUARAN, METODE }
+enum class ReportTab { PEMASUKAN, PENGELUARAN, BUDGETING }
 
 @Composable
 fun ReportScreen(
@@ -41,6 +42,12 @@ fun ReportScreen(
     val transactions by viewModel.allTransactions.collectAsState()
     val allGoals by viewModel.allSavingsGoals.collectAsState()
     val metaItems by viewModel.metaItems.collectAsState()
+    val budgetLimits by viewModel.budgetLimits.collectAsState()
+    
+    val currentBalance = remember(transactions) {
+        transactions.filter { it.type == TransactionType.PEMASUKAN }.sumOf { it.amount } - 
+        transactions.filter { it.type == TransactionType.PENGELUARAN }.sumOf { it.amount }
+    }
 
     var selectedTab by remember { mutableStateOf(ReportTab.PENGELUARAN) }
     var currentMonthOffset by remember { mutableStateOf(0) } // 0 = Current, -1 = Prev Month, etc.
@@ -99,36 +106,8 @@ fun ReportScreen(
 
     // Calculate breakdown categories logic for the circular donut layout
     val categoryStats = remember(filteredTransactions, selectedTab) {
-        if (selectedTab == ReportTab.METODE) {
-            val methodTotals = mutableMapOf<String, Double>()
-            filteredTransactions.filter { it.category != "Tabungan" }.forEach { tx ->
-                if (tx.type == TransactionType.TRANSFER) {
-                    // source account
-                    val outCurrent = methodTotals[tx.paymentMethod] ?: 0.0
-                    methodTotals[tx.paymentMethod] = outCurrent - tx.amount
-                    // destination account (saved in tx.category)
-                    val inCurrent = methodTotals[tx.category] ?: 0.0
-                    methodTotals[tx.category] = inCurrent + tx.amount
-                } else {
-                    val current = methodTotals[tx.paymentMethod] ?: 0.0
-                    if (tx.type == TransactionType.PEMASUKAN) {
-                        methodTotals[tx.paymentMethod] = current + tx.amount
-                    } else if (tx.type == TransactionType.PENGELUARAN) {
-                        methodTotals[tx.paymentMethod] = current - tx.amount
-                    }
-                }
-            }
-            val totalAmountMap = methodTotals.values.sumOf { if (it > 0) it else 0.0 }
-            methodTotals.map { (method, sum) ->
-                val txs = filteredTransactions.filter { (it.paymentMethod == method || (it.category == method && it.type == TransactionType.TRANSFER)) && it.category != "Tabungan" }
-                CategoryReportItem(
-                    category = method,
-                    amount = sum,
-                    percentage = if (sum > 0 && totalAmountMap > 0) (sum / totalAmountMap * 100) else 0.0,
-                    count = txs.size,
-                    transactions = txs
-                )
-            }.filter { it.amount != 0.0 || it.count > 0 }.sortedByDescending { it.amount }
+        if (selectedTab == ReportTab.BUDGETING) {
+            emptyList<CategoryReportItem>() // Not used for donut in budgeting
         } else {
             val selectedType = if (selectedTab == ReportTab.PEMASUKAN) TransactionType.PEMASUKAN else TransactionType.PENGELUARAN
             val subset = filteredTransactions.filter { it.type == selectedType && it.category != "Tabungan" }
@@ -299,11 +278,26 @@ fun ReportScreen(
                             fontSize = 18.sp,
                             fontWeight = FontWeight.ExtraBold
                         )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Arus Kas Chart (Moved from Homepage)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(160.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            com.example.ui.screens.DoubleBarChart(
+                                income = monthlyPemasukan,
+                                expense = monthlyPengeluaran
+                            )
+                        }
                     }
                 }
             }
 
-            // Segment tabs selector switches between Pemasukan/Pengeluaran/Metode
+            // Segment tabs selector switches between Pemasukan/Pengeluaran/Budgeting
             item {
                 Row(
                     modifier = Modifier
@@ -352,15 +346,15 @@ fun ReportScreen(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(20.dp))
-                            .background(if (selectedTab == ReportTab.METODE) GoPayBrightTeal else Color.Transparent)
-                            .clickable { selectedTab = ReportTab.METODE }
+                            .background(if (selectedTab == ReportTab.BUDGETING) GoPayBrightTeal else Color.Transparent)
+                            .clickable { selectedTab = ReportTab.BUDGETING }
                             .padding(vertical = 10.dp)
-                            .testTag("report_tab_metode"),
+                            .testTag("report_tab_budgeting"),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Metode",
-                            color = if (selectedTab == ReportTab.METODE) Color.White else Color.Gray,
+                            text = "Budgeting",
+                            color = if (selectedTab == ReportTab.BUDGETING) Color.White else Color.Gray,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp
                         )
@@ -368,140 +362,175 @@ fun ReportScreen(
                 }
             }
 
-            // Ring/Donut Graph Representation
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, OutlineVariant, RoundedCornerShape(16.dp)),
-                    colors = CardDefaults.cardColors(containerColor = GoPayNavy),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .padding(16.dp)
-                            .fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "Rincian Kategori",
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.align(Alignment.Start)
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        if (categoryStats.isEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(180.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    "Tidak ada data transaksi kategori di periode ini",
-                                    color = Color.Gray,
-                                    fontSize = 13.sp
-                                )
-                            }
-                        } else {
-                            // Render high-fi custom Donut Gauge Canvas
-                            Box(
-                                modifier = Modifier
-                                    .size(200.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                DonutChart(items = categoryStats, colorProvider = ::getDynamicColor)
-
-                                // Center Label
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        imageVector = if (selectedTab == ReportTab.PEMASUKAN) Icons.Default.TrendingUp else if (selectedTab == ReportTab.METODE) Icons.Default.Wallet else Icons.Default.RestaurantMenu,
-                                        contentDescription = "Center Icon",
-                                        tint = GoPayBrightTeal,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Category Details List representation
-            if (categoryStats.isNotEmpty()) {
+            if (selectedTab == ReportTab.BUDGETING) {
+                // Budgeting View Content
                 item {
                     Text(
-                        text = "Rincian Transaksi",
+                        text = "Atur Limit Bulanan",
                         color = Color.White,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
 
-                items(categoryStats) { stat ->
-                    val color = remember(stat.category, metaItems) { getDynamicColor(stat.category) }
-                    Row(
+                val categories = metaItems.filter { it.type == com.example.data.ItemType.EXPENSE_CATEGORY }
+                items(categories) { category ->
+                    val limit = budgetLimits.find { it.methodName == category.name }
+                    val spent = filteredTransactions.filter { it.category == category.name && it.type == TransactionType.PENGELUARAN }.sumOf { it.amount }
+                    val calculatedLimit = if (limit?.limitPercentage != null) {
+                        (limit.limitPercentage / 100.0) * currentBalance
+                    } else {
+                        limit?.limitAmount ?: 0.0
+                    }
+
+                    BudgetMethodItem(
+                        methodName = category.name,
+                        spent = spent,
+                        limit = calculatedLimit,
+                        limitPercentage = limit?.limitPercentage,
+                        limitAmount = limit?.limitAmount,
+                        currentBalance = currentBalance,
+                        onSetLimit = { amt: Double?, pct: Double? ->
+                            viewModel.setBudgetLimit(category.name, amt, pct)
+                        }
+                    )
+                }
+            } else {
+                // Ring/Donut Graph Representation
+                item {
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(GoPayNavy)
-                            .border(1.dp, OutlineVariant, RoundedCornerShape(12.dp))
-                            .clickable { selectedDetailCategory = stat }
-                            .padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .border(1.dp, OutlineVariant, RoundedCornerShape(16.dp)),
+                        colors = CardDefaults.cardColors(containerColor = GoPayNavy),
+                        shape = RoundedCornerShape(16.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(color.copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = getCategoryIcon(stat.category),
-                                    contentDescription = "Cat Icon",
-                                    tint = color,
-                                    modifier = Modifier.size(16.dp)
-                                )
+                        Column(
+                            modifier = Modifier
+                                .padding(16.dp)
+                                .fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Rincian Kategori",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.align(Alignment.Start)
+                            )
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            if (categoryStats.isEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(180.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        "Tidak ada data transaksi kategori di periode ini",
+                                        color = Color.Gray,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                            } else {
+                                // Render high-fi custom Donut Gauge Canvas
+                                Box(
+                                    modifier = Modifier
+                                        .size(200.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    DonutChart(items = categoryStats, colorProvider = ::getDynamicColor)
+
+                                    // Center Label
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(
+                                            imageVector = if (selectedTab == ReportTab.PEMASUKAN) Icons.Default.TrendingUp else Icons.Default.RestaurantMenu,
+                                            contentDescription = "Center Icon",
+                                            tint = GoPayBrightTeal,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Category Details List representation
+                if (categoryStats.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Rincian Transaksi",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    items(categoryStats) { stat ->
+                        val color = remember(stat.category, metaItems) { getDynamicColor(stat.category) }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(GoPayNavy)
+                                .border(1.dp, OutlineVariant, RoundedCornerShape(12.dp))
+                                .clickable { selectedDetailCategory = stat }
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(color.copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = getCategoryIcon(stat.category),
+                                        contentDescription = "Cat Icon",
+                                        tint = color,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(12.dp))
+
+                                Column {
+                                    Text(
+                                        text = stat.category,
+                                        color = Color.White,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Dari ${stat.count} transaksi",
+                                        color = Color.Gray,
+                                        fontSize = 11.sp
+                                    )
+                                }
                             }
 
-                            Spacer(modifier = Modifier.width(12.dp))
-
-                            Column {
+                            Column(horizontalAlignment = Alignment.End) {
                                 Text(
-                                    text = stat.category,
-                                    color = Color.White,
+                                    text = (if (stat.amount < 0) "-" else "") + "Rp ${String.format("%,.0f", Math.abs(stat.amount)).replace(",", ".")}",
+                                    color = if (stat.amount < 0) WondrCoralRed else Color.White,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Dari ${stat.count} transaksi",
-                                    color = Color.Gray,
-                                    fontSize = 11.sp
+                                    text = String.format("%.1f%%", stat.percentage),
+                                    color = color,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
                                 )
                             }
-                        }
-
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = (if (stat.amount < 0) "-" else "") + "Rp ${String.format("%,.0f", Math.abs(stat.amount)).replace(",", ".")}",
-                                color = if (stat.amount < 0) WondrCoralRed else Color.White,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = String.format("%.1f%%", stat.percentage),
-                                color = color,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
                         }
                     }
                 }
@@ -577,6 +606,197 @@ fun ReportScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = GoPayBrightTeal)
                     ) {
                         Text("Tutup", color = Color.White)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun BudgetMethodItem(
+    methodName: String,
+    spent: Double,
+    limit: Double,
+    limitPercentage: Double?,
+    limitAmount: Double?,
+    currentBalance: Double,
+    onSetLimit: (Double?, Double?) -> Unit
+) {
+    var showEditDialog by remember { mutableStateOf(false) }
+    val progress = if (limit > 0) (spent / limit).toFloat() else 0f
+    val color = getCategoryColor(methodName)
+    val displayProgress = progress.coerceIn(0f, 1f)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(GoPayNavy)
+            .border(1.dp, OutlineVariant, RoundedCornerShape(12.dp))
+            .clickable { showEditDialog = true }
+            .padding(14.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(color.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = getCategoryIcon(methodName),
+                            contentDescription = null,
+                            tint = color,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(text = methodName, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+                
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "Limit: ${if (limit > 0) "Rp ${String.format("%,.0f", limit).replace(",", ".")}" else "Tidak ada"}",
+                        color = Color.Gray,
+                        fontSize = 11.sp
+                    )
+                    if (limitPercentage != null) {
+                        Text(text = "(${String.format("%.1f", limitPercentage)}%)", color = GoPayBrightTeal, fontSize = 10.sp)
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Progress Bar
+            LinearProgressIndicator(
+                progress = { displayProgress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(CircleShape),
+                color = if (progress >= 0.9f) WondrCoralRed else GoPayBrightTeal,
+                trackColor = Color.White.copy(alpha = 0.1f)
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    text = "Terpakai: Rp ${String.format("%,.0f", spent).replace(",", ".")}",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = String.format("%.1f%%", progress * 100),
+                    color = if (progress >= 0.9f) WondrCoralRed else Color.Gray,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+
+    if (showEditDialog) {
+        var inputType by remember { mutableStateOf(if (limitPercentage != null) 1 else 0) } // 0: Amount, 1: %
+        var amountStr by remember { mutableStateOf(limitAmount?.toLong()?.toString() ?: "") }
+        var percentStr by remember { mutableStateOf(limitPercentage?.toString() ?: "") }
+
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showEditDialog = false }) {
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = GoPayNavy)
+            ) {
+                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text("Atur Limit: $methodName", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(GoPayDarkBlue).padding(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier.weight(1f).clip(RoundedCornerShape(6.dp)).background(if (inputType == 0) GoPayBrightTeal else Color.Transparent).clickable { inputType = 0 }.padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Rupiah", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Box(
+                            modifier = Modifier.weight(1f).clip(RoundedCornerShape(6.dp)).background(if (inputType == 1) GoPayBrightTeal else Color.Transparent).clickable { inputType = 1 }.padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Persentase (%)", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    if (inputType == 0) {
+                        OutlinedTextField(
+                            value = amountStr,
+                            onValueChange = { input ->
+                                val clean = input.filter { it.isDigit() }
+                                amountStr = clean
+                            },
+                            label = { Text("Limit Nominal (Rp)") },
+                            prefix = { Text("Rp ", color = Color.White) },
+                            visualTransformation = com.example.ui.ThousandsSeparatorVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = TextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedContainerColor = Color(0xFF1E222A), unfocusedContainerColor = Color(0xFF1E222A)),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                        )
+                    } else {
+                        Column {
+                            OutlinedTextField(
+                                value = percentStr,
+                                onValueChange = { percentStr = it },
+                                label = { Text("Limit Persentase (%)") },
+                                suffix = { Text("%", color = Color.White) },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = TextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedContainerColor = Color(0xFF1E222A), unfocusedContainerColor = Color(0xFF1E222A)),
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                            )
+                            
+                            val pct = percentStr.toDoubleOrNull() ?: 0.0
+                            val previewAmt = (pct / 100.0) * currentBalance
+                            Text(
+                                text = "Preview: Rp ${String.format("%,.0f", previewAmt).replace(",", ".")}",
+                                color = GoPayBrightTeal,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(top = 4.dp, start = 4.dp)
+                            )
+                        }
+                    }
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { onSetLimit(null, null); showEditDialog = false },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = WondrCoralRed)
+                        ) {
+                            Text("Hapus Limit", fontSize = 12.sp)
+                        }
+                        Button(
+                            onClick = {
+                                if (inputType == 0) {
+                                    onSetLimit(amountStr.toDoubleOrNull(), null)
+                                } else {
+                                    onSetLimit(null, percentStr.toDoubleOrNull())
+                                }
+                                showEditDialog = false
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = GoPayBrightTeal)
+                        ) {
+                            Text("Simpan", fontSize = 12.sp)
+                        }
                     }
                 }
             }

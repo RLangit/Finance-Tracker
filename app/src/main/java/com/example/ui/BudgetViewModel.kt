@@ -23,6 +23,7 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
     private val repository: TransactionRepository
     private val savingsRepository: SavingsGoalRepository
     private val metaItemDao: MetaItemDao
+    private val budgetLimitDao: BudgetLimitDao
 
     private val auth = FirebaseAuth.getInstance()
     private val firestore = FirebaseFirestore.getInstance()
@@ -32,6 +33,7 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
         repository = TransactionRepository(database.transactionDao())
         savingsRepository = SavingsGoalRepository(database.savingsGoalDao())
         metaItemDao = database.metaItemDao()
+        budgetLimitDao = database.budgetLimitDao()
         viewModelScope.launch(Dispatchers.IO) {
             val items = metaItemDao.getAllMetaItems().firstOrNull() ?: emptyList()
             if (items.isEmpty()) {
@@ -82,6 +84,32 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
     fun deleteMetaItem(item: MetaItem) {
         viewModelScope.launch(Dispatchers.IO) {
             metaItemDao.deleteMetaItem(item)
+        }
+    }
+
+    // Budget Limits
+    val budgetLimits: StateFlow<List<BudgetLimit>> = budgetLimitDao.getAllBudgetLimits()
+        .flowOn(Dispatchers.IO)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    fun setBudgetLimit(methodName: String, amount: Double?, percentage: Double?) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val existing = budgetLimitDao.getLimitByMethod(methodName)
+            if (existing != null) {
+                budgetLimitDao.updateBudgetLimit(existing.copy(limitAmount = amount, limitPercentage = percentage))
+            } else {
+                budgetLimitDao.insertBudgetLimit(BudgetLimit(methodName = methodName, limitAmount = amount, limitPercentage = percentage))
+            }
+        }
+    }
+
+    fun deleteBudgetLimit(limit: BudgetLimit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            budgetLimitDao.deleteBudgetLimit(limit)
         }
     }
 

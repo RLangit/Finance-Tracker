@@ -40,7 +40,7 @@ fun SavingsGoalSection(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Target Tabungan / Budgeting",
+                text = "Target Tabungan",
                 color = Color.White,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold

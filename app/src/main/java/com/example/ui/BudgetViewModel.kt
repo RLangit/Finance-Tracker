@@ -136,15 +136,21 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun addFundsToGoal(goal: SavingsGoal, amount: Double) {
+    fun addFundsToGoal(goal: SavingsGoal, amount: Double, sourceMethod: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            val updated = goal.copy(currentAmount = goal.currentAmount + amount)
+            val updatedBalances = goal.sourceBalances.toMutableMap()
+            updatedBalances[sourceMethod] = (updatedBalances[sourceMethod] ?: 0.0) + amount
+            
+            val updated = goal.copy(
+                currentAmount = goal.currentAmount + amount,
+                sourceBalances = updatedBalances
+            )
             savingsRepository.update(updated)
             // Log as an expense in transactions indicating transfer to savings
             val transaction = Transaction(
                 type = TransactionType.PENGELUARAN,
                 amount = amount,
-                paymentMethod = "Lainnya",
+                paymentMethod = sourceMethod,
                 category = "Tabungan",
                 notes = "Alokasi ke tabungan: ${goal.name}",
                 timestamp = System.currentTimeMillis()
@@ -153,15 +159,22 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun subtractFundsFromGoal(goal: SavingsGoal, amount: Double) {
+    fun subtractFundsFromGoal(goal: SavingsGoal, amount: Double, destinationMethod: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            val updated = goal.copy(currentAmount = goal.currentAmount - amount)
+            val updatedBalances = goal.sourceBalances.toMutableMap()
+            val currentInSource = updatedBalances[destinationMethod] ?: 0.0
+            updatedBalances[destinationMethod] = (currentInSource - amount).coerceAtLeast(0.0)
+            
+            val updated = goal.copy(
+                currentAmount = (goal.currentAmount - amount).coerceAtLeast(0.0),
+                sourceBalances = updatedBalances
+            )
             savingsRepository.update(updated)
             // Log as an income in transactions indicating transfer back to balance
             val transaction = Transaction(
                 type = TransactionType.PEMASUKAN,
                 amount = amount,
-                paymentMethod = "Lainnya",
+                paymentMethod = destinationMethod,
                 category = "Tabungan",
                 notes = "Menarik dana tabungan: ${goal.name}",
                 timestamp = System.currentTimeMillis()
@@ -173,15 +186,20 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
     fun deleteSavingsGoal(goal: SavingsGoal) {
         viewModelScope.launch(Dispatchers.IO) {
             if (goal.currentAmount > 0) {
-                val transaction = Transaction(
-                    type = TransactionType.PEMASUKAN,
-                    amount = goal.currentAmount,
-                    paymentMethod = "Lainnya",
-                    category = "Tabungan",
-                    notes = "Pencairan tabungan yang dihapus: ${goal.name}",
-                    timestamp = System.currentTimeMillis()
-                )
-                repository.insert(transaction)
+                // Refund each source individually
+                goal.sourceBalances.forEach { (source, amount) ->
+                    if (amount > 0) {
+                        val transaction = Transaction(
+                            type = TransactionType.PEMASUKAN,
+                            amount = amount,
+                            paymentMethod = source,
+                            category = "Tabungan",
+                            notes = "Pencairan tabungan yang dihapus: ${goal.name}",
+                            timestamp = System.currentTimeMillis()
+                        )
+                        repository.insert(transaction)
+                    }
+                }
             }
             savingsRepository.delete(goal)
         }
@@ -400,7 +418,8 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
         amount: Double,
         paymentMethod: String,
         category: String,
-        notes: String
+        notes: String,
+        taxAmount: Double = 0.0
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             val transaction = Transaction(
@@ -409,7 +428,8 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
                 paymentMethod = paymentMethod,
                 category = category,
                 notes = notes,
-                timestamp = System.currentTimeMillis()
+                timestamp = System.currentTimeMillis(),
+                taxAmount = taxAmount
             )
             repository.insert(transaction)
         }
@@ -422,7 +442,8 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
         paymentMethod: String,
         category: String,
         notes: String,
-        timestamp: Long
+        timestamp: Long,
+        taxAmount: Double = 0.0
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             val transaction = Transaction(
@@ -432,7 +453,8 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
                 paymentMethod = paymentMethod,
                 category = category,
                 notes = notes,
-                timestamp = timestamp
+                timestamp = timestamp,
+                taxAmount = taxAmount
             )
             repository.update(transaction)
         }
@@ -440,6 +462,39 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
 
     fun deleteTransaction(id: Long) {
         viewModelScope.launch(Dispatchers.IO) {
+            val transactions = repository.allTransactions.first()
+            val tx = transactions.find { it.id == id }
+            if (tx != null && tx.category == "Tabungan") {
+                // If it's a savings-related transaction, update the goal balance accordingly
+                val goals = savingsRepository.allGoals.first()
+                val goal = if (tx.notes.contains(": ")) {
+                    val goalName = tx.notes.substringAfter(": ").trim()
+                    goals.find { it.name == goalName }
+                } else null
+
+                if (goal != null) {
+                    val updatedBalances = goal.sourceBalances.toMutableMap()
+                    val currentInSource = updatedBalances[tx.paymentMethod] ?: 0.0
+                    
+                    if (tx.type == TransactionType.PENGELUARAN) {
+                        // Deleting a Top-Up: remove funds from goal
+                        updatedBalances[tx.paymentMethod] = (currentInSource - tx.amount).coerceAtLeast(0.0)
+                        val updated = goal.copy(
+                            currentAmount = (goal.currentAmount - tx.amount).coerceAtLeast(0.0),
+                            sourceBalances = updatedBalances
+                        )
+                        savingsRepository.update(updated)
+                    } else if (tx.type == TransactionType.PEMASUKAN) {
+                        // Deleting a Withdrawal: add funds back to goal
+                        updatedBalances[tx.paymentMethod] = currentInSource + tx.amount
+                        val updated = goal.copy(
+                            currentAmount = goal.currentAmount + tx.amount,
+                            sourceBalances = updatedBalances
+                        )
+                        savingsRepository.update(updated)
+                    }
+                }
+            }
             repository.deleteById(id)
         }
     }

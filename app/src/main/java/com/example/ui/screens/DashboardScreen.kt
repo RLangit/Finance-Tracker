@@ -669,7 +669,7 @@ fun DashboardScreen(
             methodBalances = methodBalances,
             metaItems = metaItems,
             onDismiss = { showAddDialog = false },
-            onSave = { type, amount, method, category, note ->
+            onSave = { type, amount, method, category, note, tax ->
                 // Check Budget Limit for Expense
                 if (type == TransactionType.PENGELUARAN) {
                     val limit = budgetLimits.find { it.methodName == category }
@@ -708,7 +708,7 @@ fun DashboardScreen(
                 } else {
                     notify?.invoke("Transaksi Berhasil Disimpan!")
                 }
-                viewModel.addTransaction(type, amount, method, category, note)
+                viewModel.addTransaction(type, amount, method, category, note, tax)
                 showAddDialog = false
                 recentAnimAmount = amount
                 recentAnimType = type
@@ -733,8 +733,8 @@ fun DashboardScreen(
             methodBalances = methodBalances,
             metaItems = metaItems,
             onDismiss = { editingTransaction = null },
-            onSave = { type, amount, method, category, note ->
-                viewModel.updateTransaction(tx.id, type, amount, method, category, note, tx.timestamp)
+            onSave = { type, amount, method, category, note, tax ->
+                viewModel.updateTransaction(tx.id, type, amount, method, category, note, tx.timestamp, tax)
                 editingTransaction = null
                 notify?.invoke("Transaksi Berhasil Diubah!")
                 val diff = amount - tx.amount
@@ -768,9 +768,10 @@ fun DashboardScreen(
     selectedGoalForTopup?.let { goal ->
         ManageGoalDialog(
             goal = goal,
+            metaItems = metaItems,
             onDismiss = { selectedGoalForTopup = null },
-            onTopUp = { amount ->
-                viewModel.addFundsToGoal(goal, amount)
+            onTopUp = { amount, source ->
+                viewModel.addFundsToGoal(goal, amount, source)
                 selectedGoalForTopup = null
                 notify?.invoke("Top Up Tabungan Berhasil!")
                 recentAnimAmount = amount
@@ -780,8 +781,8 @@ fun DashboardScreen(
                     recentAnimAmount = null
                 }
             },
-            onWithdraw = { amount ->
-                viewModel.subtractFundsFromGoal(goal, amount)
+            onWithdraw = { amount, destination ->
+                viewModel.subtractFundsFromGoal(goal, amount, destination)
                 selectedGoalForTopup = null
                 notify?.invoke("Tarik Dana Tabungan Berhasil!")
                 recentAnimAmount = amount
@@ -807,14 +808,18 @@ fun DashboardScreen(
             onMarkDone = {
                 viewModel.deleteSavingsGoalDirectly(goal)
                 
-                // Also refund to balance
-                viewModel.addTransaction(
-                    TransactionType.PEMASUKAN,
-                    goal.currentAmount,
-                    "Lainnya",
-                    "Tabungan",
-                    "Pencairan tabungan: ${goal.name}"
-                )
+                // Also refund each source individually
+                goal.sourceBalances.forEach { (source, amount) ->
+                    if (amount > 0) {
+                        viewModel.addTransaction(
+                            TransactionType.PEMASUKAN,
+                            amount,
+                            source,
+                            "Tabungan",
+                            "Pencairan tabungan: ${goal.name}"
+                        )
+                    }
+                }
 
                 selectedGoalForTopup = null
                 notify?.invoke("Tabungan Berhasil Dicapai, Dana dikembalikan!")
@@ -935,7 +940,7 @@ fun AddEditTransactionDialog(
     methodBalances: Map<String, Double> = emptyMap(),
     metaItems: List<com.example.data.MetaItem> = emptyList(),
     onDismiss: () -> Unit,
-    onSave: (TransactionType, Double, String, String, String) -> Unit,
+    onSave: (TransactionType, Double, String, String, String, Double) -> Unit,
     onDelete: (() -> Unit)? = null
 ) {
     var type by remember { mutableStateOf(initialType) }
@@ -948,8 +953,10 @@ fun AddEditTransactionDialog(
     val expenseCategories = metaItems.filter { it.type == com.example.data.ItemType.EXPENSE_CATEGORY }.map { it.name }.ifEmpty { listOf("Makanan & Minuman", "Transportasi", "Belanja harian", "Keperluan Kuliah", "Tagihan & Pulsa", "Hiburan", "Lainnya") }
     val paymentMethods = metaItems.filter { it.type == com.example.data.ItemType.METHOD }.map { it.name }.ifEmpty { listOf("Cash", "Wondr", "Dana", "GoPay", "Lainnya") }
 
-    val categories = if (type == TransactionType.PEMASUKAN) incomeCategories else if (type == TransactionType.TRANSFER) paymentMethods else expenseCategories
+    val categoriesList = if (type == TransactionType.PEMASUKAN) incomeCategories else if (type == TransactionType.TRANSFER) paymentMethods else expenseCategories
     var selectedCategory by remember { mutableStateOf(if (initialCategory.isNotBlank()) initialCategory else "") }
+    var taxAmountStr by remember { mutableStateOf("") }
+    var hasTax by remember { mutableStateOf(false) }
 
     var expandedMethod by remember { mutableStateOf(false) }
     var expandedCategory by remember { mutableStateOf(false) }
@@ -989,7 +996,7 @@ fun AddEditTransactionDialog(
                     dismissText = "Abaikan, Tetap Catat Pengeluaran",
                     onDismiss = { 
                         showSuggestTransferConfirm = false
-                        onSave(type, amountRaw.toDouble(), paymentMethod, selectedCategory, notes) 
+                        onSave(type, amountRaw.toDouble(), paymentMethod, selectedCategory, notes, 0.0)
                     }
                 )
             } else {
@@ -1137,7 +1144,7 @@ fun AddEditTransactionDialog(
                         onDismissRequest = { expandedCategory = false },
                         modifier = Modifier.background(GoPayNavy)
                     ) {
-                        categories.forEach { cat ->
+                        categoriesList.forEach { cat ->
                             DropdownMenuItem(
                                 text = { Text(cat, color = Color.White) },
                                 onClick = {
@@ -1156,6 +1163,34 @@ fun AddEditTransactionDialog(
                     label = "Keterangan / Deskripsi (Opsional)",
                     modifier = Modifier.fillMaxWidth().testTag("notes_field")
                 )
+
+                // Tax Section for Transfer
+                if (type == TransactionType.TRANSFER) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = hasTax,
+                                onCheckedChange = { hasTax = it },
+                                colors = CheckboxDefaults.colors(checkedColor = GoPayBrightTeal)
+                            )
+                            Text("Ada Biaya Admin / Pajak?", color = Color.White, fontSize = 13.sp)
+                        }
+                        
+                        if (hasTax) {
+                            CustomInputBox(
+                                value = taxAmountStr,
+                                onValueChange = { input ->
+                                    if (input.all { it.isDigit() }) taxAmountStr = input
+                                },
+                                label = "Nominal Biaya Admin",
+                                prefix = "Rp",
+                                visualTransformation = com.example.ui.ThousandsSeparatorVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
 
                 // Dialog Buttons Bottom Drawer
                 Row(
@@ -1191,18 +1226,21 @@ fun AddEditTransactionDialog(
                     Button(
                         onClick = {
                             val amount = amountRaw.toDouble()
+                            val tax = if (hasTax) taxAmountStr.toDoubleOrNull() ?: 0.0 else 0.0
                             if (amount > 0.0 && paymentMethod.isNotBlank() && selectedCategory.isNotBlank()) {
                                 if (type == TransactionType.TRANSFER && paymentMethod == selectedCategory) {
                                     android.widget.Toast.makeText(context, "Metode asal dan tujuan transfer tidak boleh sama", android.widget.Toast.LENGTH_SHORT).show()
                                     return@Button
                                 }
                                 val methodBalance = methodBalances[paymentMethod] ?: 0.0
-                                if (type == TransactionType.TRANSFER && amount > methodBalance) {
+                                val totalNeeded = if (type == TransactionType.TRANSFER) amount + tax else amount
+                                
+                                if (type == TransactionType.TRANSFER && totalNeeded > methodBalance) {
                                     showInsufficientBalanceConfirm = true
                                 } else if (type == TransactionType.PENGELUARAN && amount > methodBalance) {
                                     showSuggestTransferConfirm = true
                                 } else {
-                                    onSave(type, amount, paymentMethod, selectedCategory, notes)
+                                    onSave(type, amount, paymentMethod, selectedCategory, notes, tax)
                                 }
                             }
                         },

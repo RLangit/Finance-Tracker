@@ -17,5 +17,6 @@ data class Transaction(
     val paymentMethod: String,
     val category: String,
     val notes: String = "",
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val taxAmount: Double = 0.0
 )

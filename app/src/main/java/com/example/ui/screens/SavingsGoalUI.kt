@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -305,12 +306,13 @@ fun AddSavingsGoalDialog(
 fun ManageGoalDialog(
     goal: SavingsGoal,
     onDismiss: () -> Unit,
-    onTopUp: (Double) -> Unit,
-    onWithdraw: (Double) -> Unit,
+    onTopUp: (Double, String) -> Unit,
+    onWithdraw: (Double, String) -> Unit,
     onDelete: () -> Unit,
     onMarkDone: () -> Unit,
     onMarkDoneAutomatically: (String, String) -> Unit,
-    onEdit: (String, Double, String) -> Unit
+    onEdit: (String, Double, String) -> Unit,
+    metaItems: List<com.example.data.MetaItem> = emptyList()
 ) {
     var amountRaw by remember { mutableStateOf(0L) }
     var amountStr by remember { mutableStateOf("") }
@@ -330,11 +332,27 @@ fun ManageGoalDialog(
     var expandedEditCategory by remember { mutableStateOf(false) }
     
     val categories = listOf("Makanan & Minuman", "Transportasi", "Belanja harian", "Keperluan Kuliah", "Tagihan & Pulsa", "Hiburan", "Lainnya")
-    val methods = listOf("Cash", "Wondr", "Dana", "GoPay", "Lainnya")
+    val allMethods = metaItems.filter { it.type == com.example.data.ItemType.METHOD }.map { it.name }.ifEmpty { listOf("Cash", "Wondr", "Dana", "GoPay", "Lainnya") }
+
+    var selectedSourceMethod by remember { mutableStateOf(allMethods.first()) }
+    var expandedSourceMethod by remember { mutableStateOf(false) }
 
     var autoMethod by remember { mutableStateOf("") }
     var expandedAutoMethod by remember { mutableStateOf(false) }
     var autoNotes by remember { mutableStateOf(goal.name) }
+
+    val goalMethodStats = remember(goal.sourceBalances) {
+        val total = goal.currentAmount
+        goal.sourceBalances.map { (method, amount) ->
+            CategoryReportItem(
+                category = method,
+                amount = amount,
+                percentage = if (total > 0) (amount / total * 100) else 0.0,
+                count = 0,
+                transactions = emptyList()
+            )
+        }.filter { it.amount > 0 }.sortedByDescending { it.amount }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -348,7 +366,7 @@ fun ManageGoalDialog(
             if (showDeleteConfirm) {
                 CustomActionDialog(
                     title = "Hapus Tabungan?",
-                    message = "Progres tabungan akan dicairkan ke saldo utama.",
+                    message = "Progres tabungan akan dicairkan ke saldo utama sesuai sumber asalnya.",
                     confirmText = "Hapus",
                     confirmColor = WondrCoralRed,
                     onConfirm = onDelete,
@@ -360,7 +378,7 @@ fun ManageGoalDialog(
                     message = "Jumlah ini akan membuat tabungan melebihi target. Anda ingin lanjut memasukkan semuanya?",
                     confirmText = "Ya, Lanjut",
                     onConfirm = { 
-                        onTopUp(amountRaw.toDouble())
+                        onTopUp(amountRaw.toDouble(), selectedSourceMethod)
                         showExceedConfirm = false
                     },
                     dismissText = "Pilihan Lain",
@@ -375,7 +393,7 @@ fun ManageGoalDialog(
                     message = "Bagaimana Anda ingin melanjutkan?",
                     confirmText = "Isi hingga target (Rp ${String.format("%,.0f", remaining).replace(",", ".")})",
                     onConfirm = { 
-                        onTopUp(remaining)
+                        onTopUp(remaining, selectedSourceMethod)
                         showExceedOptions = false
                     },
                     onDismiss = { showExceedOptions = false }
@@ -417,7 +435,7 @@ fun ManageGoalDialog(
                             onDismissRequest = { expandedAutoMethod = false },
                             modifier = Modifier.background(GoPayDarkBlue)
                         ) {
-                            methods.forEach { m ->
+                            allMethods.forEach { m ->
                                 DropdownMenuItem(
                                     text = { Text(m, color = Color.White) },
                                     onClick = {
@@ -561,6 +579,35 @@ fun ManageGoalDialog(
                         }
                     }
 
+                    if (goalMethodStats.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.Black.copy(alpha = 0.1f))
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(modifier = Modifier.size(60.dp)) {
+                                DonutChart(items = goalMethodStats, colorProvider = ::getCategoryColor)
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                goalMethodStats.forEach { stat ->
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(getCategoryColor(stat.category)))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "${stat.category}: Rp ${String.format("%,.0f", stat.amount).replace(",", ".")}",
+                                            color = Color.White.copy(alpha = 0.8f),
+                                            fontSize = 10.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     Text(
                         text = "Terkumpul: Rp ${String.format("%,.0f", goal.currentAmount).replace(",", ".")}\n" +
                                 if (remaining > 0) "Kurang Rp ${String.format("%,.0f", remaining).replace(",", ".")} lagi!" else "Target Terpenuhi!",
@@ -568,26 +615,57 @@ fun ManageGoalDialog(
                         fontSize = 13.sp
                     )
 
-                    CustomInputBox(
-                        value = amountStr,
-                        onValueChange = { input ->
-                            val cleanString = input.filter { it.isDigit() }
-                            val stripped = if (cleanString.startsWith("0") && cleanString.length > 1) cleanString.trimStart('0') else cleanString
-                            if (stripped.isNotEmpty()) {
-                                val raw = stripped.toLongOrNull() ?: 0L
-                                amountRaw = raw
-                                amountStr = stripped
-                            } else {
-                                amountRaw = 0L
-                                amountStr = ""
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ExposedDropdownMenuBox(
+                            expanded = expandedSourceMethod,
+                            onExpandedChange = { expandedSourceMethod = !expandedSourceMethod }
+                        ) {
+                            CustomInputBox(
+                                value = selectedSourceMethod,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = "Sumber / Tujuan Dana",
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedSourceMethod) },
+                                modifier = Modifier.fillMaxWidth().menuAnchor()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = expandedSourceMethod,
+                                onDismissRequest = { expandedSourceMethod = false },
+                                modifier = Modifier.background(GoPayDarkBlue)
+                            ) {
+                                allMethods.forEach { m ->
+                                    DropdownMenuItem(
+                                        text = { Text(m, color = Color.White) },
+                                        onClick = {
+                                            selectedSourceMethod = m
+                                            expandedSourceMethod = false
+                                        }
+                                    )
+                                }
                             }
-                        },
-                        label = "Nominal",
-                        prefix = "Rp",
-                        visualTransformation = com.example.ui.ThousandsSeparatorVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                        }
+
+                        CustomInputBox(
+                            value = amountStr,
+                            onValueChange = { input ->
+                                val cleanString = input.filter { it.isDigit() }
+                                val stripped = if (cleanString.startsWith("0") && cleanString.length > 1) cleanString.trimStart('0') else cleanString
+                                if (stripped.isNotEmpty()) {
+                                    val raw = stripped.toLongOrNull() ?: 0L
+                                    amountRaw = raw
+                                    amountStr = stripped
+                                } else {
+                                    amountRaw = 0L
+                                    amountStr = ""
+                                }
+                            },
+                            label = "Nominal",
+                            prefix = "Rp",
+                            visualTransformation = com.example.ui.ThousandsSeparatorVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
 
                     if (remaining <= 0) {
                         Button(
@@ -613,14 +691,17 @@ fun ManageGoalDialog(
                         ) {
                             Text("Hapus", color = WondrCoralRed, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
+                        
+                        val canWithdraw = amountRaw > 0 && (goal.sourceBalances[selectedSourceMethod] ?: 0.0) >= amountRaw.toDouble()
+
                         Button(
                             onClick = {
-                                if (amountRaw > 0 && amountRaw <= goal.currentAmount) onWithdraw(amountRaw.toDouble())
+                                if (canWithdraw) onWithdraw(amountRaw.toDouble(), selectedSourceMethod)
                             },
                             modifier = Modifier.weight(1.1f),
                             colors = ButtonDefaults.buttonColors(containerColor = GoPayDarkBlue),
                             shape = RoundedCornerShape(8.dp),
-                            enabled = amountRaw > 0 && amountRaw <= goal.currentAmount,
+                            enabled = canWithdraw,
                             contentPadding = PaddingValues(0.dp)
                         ) {
                             Text("Tarik", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -632,7 +713,7 @@ fun ManageGoalDialog(
                                     if (topupAmt > remaining && remaining > 0) {
                                         showExceedConfirm = true
                                     } else {
-                                        if (topupAmt > 0) onTopUp(topupAmt)
+                                        if (topupAmt > 0) onTopUp(topupAmt, selectedSourceMethod)
                                     }
                                 },
                                 modifier = Modifier.weight(1.1f),

@@ -503,9 +503,9 @@ fun HistoryScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
-                                        imageVector = catIcon,
+                                        imageVector = if (tx.type == TransactionType.TRANSFER) Icons.Default.SyncAlt else catIcon,
                                         contentDescription = "Category Logo",
-                                        tint = catColor,
+                                        tint = if (tx.type == TransactionType.TRANSFER) GoPayBrightTeal else catColor,
                                         modifier = Modifier.size(20.dp)
                                     )
                                 }
@@ -549,6 +549,16 @@ fun HistoryScreen(
                                     maxLines = 1,
                                     softWrap = false
                                 )
+                                
+                                if (tx.taxAmount > 0) {
+                                    Text(
+                                        text = "- ${String.format("%,.0f", tx.taxAmount).replace(",", ".")}",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Normal
+                                    )
+                                }
+
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(

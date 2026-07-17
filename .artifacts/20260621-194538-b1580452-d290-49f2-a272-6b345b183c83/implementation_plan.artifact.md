@@ -1,75 +1,67 @@
-# Reorganizing UI and Implementing Budgeting System
+# Transfer Tax, Icon Fixes, and Bidirectional Savings Sync
 
-This plan outlines the steps to reorganize the Dashboard and Report screens and add a new Budgeting system as requested.
+This plan introduces support for optional taxes on transfer transactions, fixes missing UI elements in the history page, and ensures that deleting savings-related transactions correctly updates the corresponding savings goal balance.
 
 ## User Review Required
 
 > [!IMPORTANT]
-> - **Budgeting Logic**: Budget limits will be per "Payment Method" per month. Limits can be set as a fixed amount (IDR) or a percentage of the *total balance* across all methods.
-> - **Visibility Toggle**: The "Money Distribution" section on the Homepage will be tied to the same balance visibility toggle as the main balance.
+> - **Database Migration**: Adding `taxAmount` to the `Transaction` entity will require a database migration (version 6 to 7).
+> - **Savings Deletion**: Deleting a transaction with the category "Tabungan" will now automatically update the `currentAmount` and `sourceBalances` of the linked `SavingsGoal`. This assumes the transaction note exactly matches the `SavingsGoal` name (or we find another reliable link).
 
 ## Proposed Changes
 
 ### Data Layer
-Add `BudgetLimit` entity and DAO to track monthly limits.
 
-#### [BudgetLimit.kt](file:///D:/finance-tracker/app/src/main/java/com/example/data/BudgetLimit.kt) [NEW]
-- Define `BudgetLimit` entity: `id`, `methodName`, `limitAmount` (nullable), `limitPercentage` (nullable).
-
-#### [BudgetLimitDao.kt](file:///D:/finance-tracker/app/src/main/java/com/example/data/BudgetLimitDao.kt) [NEW]
-- Standard CRUD operations for `BudgetLimit`.
+#### [Transaction.kt](file:///D:/finance-tracker/app/src/main/java/com/example/data/Transaction.kt)
+- Add `taxAmount: Double = 0.0` field to the `Transaction` entity.
 
 #### [AppDatabase.kt](file:///D:/finance-tracker/app/src/main/java/com/example/data/AppDatabase.kt)
-- Add `BudgetLimitDao` to the database.
+- Increment database version to 7.
 
 ---
 
 ### ViewModel Layer
-Update `BudgetViewModel` to handle budget limits and the reorganized chart data.
 
 #### [BudgetViewModel.kt](file:///D:/finance-tracker/app/src/main/java/com/example/ui/BudgetViewModel.kt)
-- Expose `budgetLimits` Flow.
-- Add methods to set/update budget limits.
-- (Optional) Add a helper for calculating "All Time" distribution if not already convenient.
+- **`addTransaction`**: Update signature to accept `taxAmount`.
+- **`deleteTransaction`**: Implement bidirectional sync for savings:
+    - If the transaction is of type `PENGELUARAN` and category is "Tabungan":
+        - Extract goal name from notes or lookup.
+        - Subtract the amount from the goal's `currentAmount` and its source (the transaction's `paymentMethod`).
+    - If the transaction is of type `PEMASUKAN` and category is "Tabungan":
+        - Add the amount back to the goal's `currentAmount` and its source.
 
 ---
 
 ### UI Layer
 
 #### [DashboardScreen.kt](file:///D:/finance-tracker/app/src/main/java/com/example/ui/screens/DashboardScreen.kt)
-- **Remove**: "Arus Kas Bulanan" section (but keep `DoubleBarChart` component code if needed for other screens).
-- **Add**: "Money Distribution" section below "Rp. xxx dipakai bulan ini".
-    - Uses `DonutChart` and a list of method balances.
-    - Title: "Money Distribution".
-    - Visibility: Hidden by default (using `isBalanceVisible` state).
-    - Animation: Expandable dropdown when unhidden.
-    - Range: All Time.
+- **`AddEditTransactionDialog`**:
+    - Add a "Pajak / Biaya Admin" toggle or optional input field specifically for the `TRANSFER` type.
+    - If tax is provided, include it in the `addTransaction` call.
+    - For transfers, ensure the source balance is reduced by `amount + taxAmount`.
 
-#### [ReportScreen.kt](file:///D:/finance-tracker/app/src/main/java/com/example/ui/screens/ReportScreen.kt)
-- **Remove**: "Metode" tab from `ReportTab`.
-- **Add**: "Budgeting" tab to `ReportTab`.
-- **Add**: `DoubleBarChart` between "Selisih" and the breakdown categories (Pemasukan/Pengeluaran).
-- **Implement**: "Budgeting" screen content:
-    - List of payment methods with current month spending vs limit.
-    - UI to set/edit limits (fixed amount or percentage).
-    - Progress bars showing usage.
+#### [HistoryScreen.kt](file:///D:/finance-tracker/app/src/main/java/com/example/ui/screens/HistoryScreen.kt)
+- Fix missing icon for `TransactionType.TRANSFER` in the transaction list items.
+- Update transaction item display to show `- Rp {taxAmount}` in white below the main amount if `taxAmount > 0`.
+
+---
 
 ## Verification Plan
 
 ### Automated Tests
-- N/A (Manual verification is preferred for UI reorganizations).
+- N/A
 
 ### Manual Verification
-1. **Homepage**:
-    - Verify "Arus Kas Bulanan" is gone.
-    - Verify "Money Distribution" appears below the "monthly spend" badge.
-    - Verify it is hidden when balance is hidden.
-    - Verify it shows "All Time" data.
-2. **Report Page**:
-    - Verify `DoubleBarChart` appears below "Selisih".
-    - Verify the third tab is now "Budgeting".
-    - Verify "Metode" tab is gone.
-3. **Budgeting**:
-    - Set a limit for a method (e.g., "Cash").
-    - Add a transaction using that method.
-    - Verify progress bar and spent amount update correctly.
+1. **Transfer with Tax**:
+    - Perform a transfer of 20k with 1k tax.
+    - Verify history shows 20k (with teal icon) and "- 1.000" in white.
+    - Verify source balance is reduced by 21k.
+2. **Transfer Icon**:
+    - Open the History page.
+    - Verify transfer transactions now show a relevant icon (e.g., `SyncAlt` or `SwapHoriz`).
+3. **Savings Deletion Sync**:
+    - Add 50k to a "Beli Parfum" goal.
+    - Go to history and delete that 50k "Alokasi ke tabungan" transaction.
+    - Verify the "Beli Parfum" goal balance returns to its previous state.
+    - Do the same for a "Menarik dana" (withdrawal) deletion.

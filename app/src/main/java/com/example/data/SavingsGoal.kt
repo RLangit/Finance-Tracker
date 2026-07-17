@@ -10,5 +10,6 @@ data class SavingsGoal(
     val targetAmount: Double,
     val currentAmount: Double = 0.0,
     val targetDateMillis: Long,
-    val category: String = "Lainnya"
+    val category: String = "Lainnya",
+    val sourceBalances: Map<String, Double> = emptyMap()
 )

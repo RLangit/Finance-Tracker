@@ -232,8 +232,10 @@ fun DashboardScreen(
         transactions.filter { it.type == TransactionType.PENGELUARAN && it.category != "Tabungan" }.sumOf { it.amount }
     }
     val currentBalance = remember(transactions) {
-        transactions.filter { it.type == TransactionType.PEMASUKAN }.sumOf { it.amount } - 
-        transactions.filter { it.type == TransactionType.PENGELUARAN }.sumOf { it.amount }
+        val income = transactions.filter { it.type == TransactionType.PEMASUKAN }.sumOf { it.amount }
+        val expense = transactions.filter { it.type == TransactionType.PENGELUARAN }.sumOf { it.amount }
+        val taxes = transactions.sumOf { it.taxAmount }
+        income - expense - taxes
     }
 
     val allTimeMethodStats = remember(transactions) {
@@ -242,10 +244,10 @@ fun DashboardScreen(
             if (tx.category == "Tabungan") return@forEach
             
             if (tx.type == TransactionType.TRANSFER) {
-                // source account
+                // source account: reduce by amount + tax
                 val outCurrent = methodTotals[tx.paymentMethod] ?: 0.0
-                methodTotals[tx.paymentMethod] = outCurrent - tx.amount
-                // destination account (saved in tx.category)
+                methodTotals[tx.paymentMethod] = outCurrent - (tx.amount + tx.taxAmount)
+                // destination account (saved in tx.category): increase by amount
                 val inCurrent = methodTotals[tx.category] ?: 0.0
                 methodTotals[tx.category] = inCurrent + tx.amount
             } else {
@@ -253,7 +255,8 @@ fun DashboardScreen(
                 if (tx.type == TransactionType.PEMASUKAN) {
                     methodTotals[tx.paymentMethod] = current + tx.amount
                 } else if (tx.type == TransactionType.PENGELUARAN) {
-                    methodTotals[tx.paymentMethod] = current - tx.amount
+                    // PENGELUARAN reduces by amount + tax if any
+                    methodTotals[tx.paymentMethod] = current - (tx.amount + tx.taxAmount)
                 }
             }
         }
@@ -275,10 +278,10 @@ fun DashboardScreen(
             if (tx.category == "Tabungan") return@forEach
             
             if (tx.type == TransactionType.TRANSFER) {
-                // Source
+                // Source: reduce by amount + tax
                 val outCurrent = balances[tx.paymentMethod] ?: 0.0
-                balances[tx.paymentMethod] = outCurrent - tx.amount
-                // Destination
+                balances[tx.paymentMethod] = outCurrent - (tx.amount + tx.taxAmount)
+                // Destination: increase by amount
                 val inCurrent = balances[tx.category] ?: 0.0
                 balances[tx.category] = inCurrent + tx.amount
             } else {
@@ -286,7 +289,7 @@ fun DashboardScreen(
                 if (tx.type == TransactionType.PEMASUKAN) {
                     balances[tx.paymentMethod] = current + tx.amount
                 } else if (tx.type == TransactionType.PENGELUARAN) {
-                    balances[tx.paymentMethod] = current - tx.amount
+                    balances[tx.paymentMethod] = current - (tx.amount + tx.taxAmount)
                 }
             }
         }
@@ -300,6 +303,7 @@ fun DashboardScreen(
     }
     
     var recentAnimAmount by remember { mutableStateOf<Double?>(null) }
+    var recentAnimTax by remember { mutableStateOf<Double?>(null) }
     var recentAnimType by remember { mutableStateOf<TransactionType?>(null) }
     val scope = rememberCoroutineScope()
     var achievedGoalPopupName by remember { mutableStateOf<String?>(null) }
@@ -396,15 +400,47 @@ fun DashboardScreen(
                                 exit = fadeOut()
                             ) {
                                 val amtStr = recentAnimAmount?.let { String.format("%,.0f", it).replace(",", ".") } ?: ""
+                                val taxStr = recentAnimTax?.let { String.format("%,.0f", it).replace(",", ".") } ?: ""
+                                
                                 val isInc = recentAnimType == TransactionType.PEMASUKAN
+                                val isTransfer = recentAnimType == TransactionType.TRANSFER
+
                                 Column {
                                     Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = if (isInc) "+ Rp $amtStr" else "- Rp $amtStr",
-                                        color = if (isInc) WondrEmeraldGreen else WondrCoralRed,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (isTransfer) {
+                                            Icon(
+                                                imageVector = Icons.Default.SyncAlt,
+                                                contentDescription = null,
+                                                tint = GoPayBrightTeal,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "Rp $amtStr",
+                                                color = GoPayBrightTeal,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        } else {
+                                            Text(
+                                                text = if (isInc) "+ Rp $amtStr" else "- Rp $amtStr",
+                                                color = if (isInc) WondrEmeraldGreen else WondrCoralRed,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+
+                                        if (recentAnimTax != null && recentAnimTax!! > 0) {
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "- Rp $taxStr",
+                                                color = Color.White,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -711,10 +747,12 @@ fun DashboardScreen(
                 viewModel.addTransaction(type, amount, method, category, note, tax)
                 showAddDialog = false
                 recentAnimAmount = amount
+                recentAnimTax = if (tax > 0) tax else null
                 recentAnimType = type
                 scope.launch {
                     kotlinx.coroutines.delay(2000)
                     recentAnimAmount = null
+                    recentAnimTax = null
                 }
             }
         )
@@ -729,6 +767,7 @@ fun DashboardScreen(
             initialMethod = tx.paymentMethod,
             initialCategory = tx.category,
             initialNotes = tx.notes,
+            initialTaxAmount = tx.taxAmount,
             currentBalance = currentBalance + (if (tx.type == TransactionType.PENGELUARAN) tx.amount else -tx.amount),
             methodBalances = methodBalances,
             metaItems = metaItems,
@@ -740,10 +779,12 @@ fun DashboardScreen(
                 val diff = amount - tx.amount
                 val effType = if (diff > 0) type else (if (type == TransactionType.PENGELUARAN) TransactionType.PEMASUKAN else TransactionType.PENGELUARAN)
                 recentAnimAmount = kotlin.math.abs(diff)
+                recentAnimTax = if (tax > 0) tax else null
                 recentAnimType = effType
                 scope.launch {
                     kotlinx.coroutines.delay(2000)
                     recentAnimAmount = null
+                    recentAnimTax = null
                 }
             },
             onDelete = {
@@ -936,6 +977,7 @@ fun AddEditTransactionDialog(
     initialMethod: String = "",
     initialCategory: String = "",
     initialNotes: String = "",
+    initialTaxAmount: Double = 0.0,
     currentBalance: Double = 0.0,
     methodBalances: Map<String, Double> = emptyMap(),
     metaItems: List<com.example.data.MetaItem> = emptyList(),
@@ -955,8 +997,8 @@ fun AddEditTransactionDialog(
 
     val categoriesList = if (type == TransactionType.PEMASUKAN) incomeCategories else if (type == TransactionType.TRANSFER) paymentMethods else expenseCategories
     var selectedCategory by remember { mutableStateOf(if (initialCategory.isNotBlank()) initialCategory else "") }
-    var taxAmountStr by remember { mutableStateOf("") }
-    var hasTax by remember { mutableStateOf(false) }
+    var taxAmountStr by remember { mutableStateOf(if (initialTaxAmount > 0) initialTaxAmount.toLong().toString() else "") }
+    var hasTax by remember { mutableStateOf(initialTaxAmount > 0) }
 
     var expandedMethod by remember { mutableStateOf(false) }
     var expandedCategory by remember { mutableStateOf(false) }

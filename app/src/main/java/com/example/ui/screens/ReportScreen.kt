@@ -45,8 +45,10 @@ fun ReportScreen(
     val budgetLimits by viewModel.budgetLimits.collectAsState()
     
     val currentBalance = remember(transactions) {
-        transactions.filter { it.type == TransactionType.PEMASUKAN }.sumOf { it.amount } - 
-        transactions.filter { it.type == TransactionType.PENGELUARAN }.sumOf { it.amount }
+        val income = transactions.filter { it.type == TransactionType.PEMASUKAN }.sumOf { it.amount }
+        val expense = transactions.filter { it.type == TransactionType.PENGELUARAN }.sumOf { it.amount }
+        val taxes = transactions.sumOf { it.taxAmount }
+        income - expense - taxes
     }
 
     var selectedTab by remember { mutableStateOf(ReportTab.PENGELUARAN) }
@@ -97,7 +99,9 @@ fun ReportScreen(
         filteredTransactions.filter { it.type == TransactionType.PEMASUKAN && it.category != "Tabungan" }.sumOf { it.amount }
     }
     val monthlyPengeluaran = remember(filteredTransactions) {
-        filteredTransactions.filter { it.type == TransactionType.PENGELUARAN && it.category != "Tabungan" }.sumOf { it.amount }
+        val expense = filteredTransactions.filter { it.type == TransactionType.PENGELUARAN && it.category != "Tabungan" }.sumOf { it.amount }
+        val taxes = filteredTransactions.sumOf { it.taxAmount }
+        expense + taxes
     }
     val totalCurrentTabungan = remember(allGoals) {
         allGoals.sumOf { it.currentAmount }
@@ -111,13 +115,13 @@ fun ReportScreen(
         } else {
             val selectedType = if (selectedTab == ReportTab.PEMASUKAN) TransactionType.PEMASUKAN else TransactionType.PENGELUARAN
             val subset = filteredTransactions.filter { it.type == selectedType && it.category != "Tabungan" }
-            val totalAmount = subset.sumOf { it.amount }
+            val totalAmount = subset.sumOf { it.amount + it.taxAmount }
 
             if (totalAmount == 0.0) emptyList()
             else {
                 subset.groupBy { it.category }
                     .map { (cat, list) ->
-                        val sum = list.sumOf { it.amount }
+                        val sum = list.sumOf { it.amount + it.taxAmount }
                         CategoryReportItem(
                             category = cat,
                             amount = sum,
@@ -376,7 +380,7 @@ fun ReportScreen(
                 val categories = metaItems.filter { it.type == com.example.data.ItemType.EXPENSE_CATEGORY }
                 items(categories) { category ->
                     val limit = budgetLimits.find { it.methodName == category.name }
-                    val spent = filteredTransactions.filter { it.category == category.name && it.type == TransactionType.PENGELUARAN }.sumOf { it.amount }
+                    val spent = filteredTransactions.filter { it.category == category.name && it.type == TransactionType.PENGELUARAN }.sumOf { it.amount + it.taxAmount }
                     val calculatedLimit = if (limit?.limitPercentage != null) {
                         (limit.limitPercentage / 100.0) * currentBalance
                     } else {

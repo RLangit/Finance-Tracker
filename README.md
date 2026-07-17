@@ -6,15 +6,15 @@ Manage your money with ease using a sleek, modern, and intuitive financial compa
 
 ### 💰 Monthly Budgeting & Expense Limits
 Take control of your spending habits with the new Category-Based Budgeting system.
-- **Smart Limits**: Set monthly spending limits for each category (e.g., Food, Transport) using fixed Rupiah amounts or percentages of your balance.
+- **Smart Limits**: Set monthly spending limits for each category (e.g., Food, Transport) using either fixed Rupiah amounts or percentages of your balance.
 - **Over-Budget Warnings**: Get instant popup notifications if an expense exceeds your set limit, showing exactly how much you've gone over.
 - **Visual Progress**: Track your spending in real-time with dynamic progress bars that accurately reflect your monthly usage.
 
 ### 📊 Comprehensive Financial Analysis
 Understand your financial health with clear, interactive visualizations on the **Keuangan** page.
 - **Cash Flow Chart**: Compare your Income vs. Expenses visually to see your monthly surplus or deficit.
-- **Detailed Rekap**: Get a breakdown of your total Pemasukan, Tabungan, and Pengeluaran for any given month.
-- **Category Distribution**: See exactly where your money goes with detailed charts and transaction rincian.
+- **Detailed Rekap**: Get a breakdown of your total Income, Savings, and Expense for any given month.
+- **Category Distribution**: See exactly where your money goes with detailed charts and transaction detail.
 
 ### 🎯 Set Aside Your 'Tabungan' (Savings Goals)
 Don't just save—save with a purpose. Create specific savings targets and track your progress in real-time with visual progress bars.
@@ -26,7 +26,6 @@ Keep track of your assets across different platforms like **Dana**, **Gopay**, o
 
 ### 📝 Seamless Tracking & Formatting
 - **History View**: Search and filter through your transaction history with ease.
-- **Smart Formatting**: All Rupiah values are automatically formatted with thousands separators (e.g., `Rp 50.000`) for superior readability.
 - **Real-time Updates**: Your balance and stats update instantly as you manage your money.
 
 ### ☁️ Secure Cloud Backup

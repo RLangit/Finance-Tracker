@@ -17,7 +17,6 @@ The App is designed to help you track finances. Financial records (income, expen
 
 ## 2. Permissions Used
 *   `INTERNET`: Required for Firebase Sync and Authentication.
-*   `POST_NOTIFICATIONS`: Required to show alerts.
 
 ## 3. Data Security
 We implement industry-standard security measures, including Firebase security rules, to ensure your cloud data is only accessible by you.

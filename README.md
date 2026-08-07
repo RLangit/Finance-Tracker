@@ -10,7 +10,6 @@ Take control of your spending habits with the new Category-Based Budgeting syste
 - **Over-Budget Warnings**: Get instant popup notifications if an expense exceeds your set limit, showing exactly how much you've gone over.
 - **Visual Progress**: Track your spending in real-time with dynamic progress bars that accurately reflect your monthly usage.
 - **Daily Spending Averages**: Stay aware of your daily habits with the **Rata-rata Pengeluaran Harian** feature. See your overall daily average and deep-dive into specific categories to see how much you're spending per day.
-- **Persistent Preferences**: The app remembers your selected categories for daily average tracking, so you don't have to re-configure it every time you open the app.
 
 ### 📊 Comprehensive Financial Analysis
 Understand your financial health with clear, interactive visualizations on the **Keuangan** page.
@@ -19,14 +18,12 @@ Understand your financial health with clear, interactive visualizations on the *
 - **Category Distribution**: See exactly where your money goes with detailed charts and transaction detail.
 
 ### 🎯 Set Aside Your 'Tabungan' (Savings Goals)
-Don't just save—save with a purpose. Create specific savings targets and track your progress in real-time with visual progress bars.
+Save with a purpose. Create specific savings targets and track your progress in real-time with visual progress bars.
 
 ### 💳 Money Distribution & Privacy
 Keep track of your assets across different platforms like **Dana**, **Gopay**, or Cash.
 - **Always Visible Charts**: See your wallet distribution at a glance on the homepage.
 - **Privacy First**: Exact amounts are masked by default and can be toggled with a single tap, keeping your detailed finances private in public spaces.
-
-- **Seamless Tracking**: Log expenses with automatic currency formatting and accurate payment method tracking. Editing transactions now correctly reflects changes in your chosen payment method (e.g., switching from Cash to GoPay).
 - **History View**: Search and filter through your transaction history with ease.
 - **Real-time Updates**: Your balance and stats update instantly as you manage your money.
 

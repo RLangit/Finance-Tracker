@@ -87,6 +87,12 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun toggleMetaItemAvgSelection(item: MetaItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            metaItemDao.updateMetaItem(item.copy(isSelectedForAvg = !item.isSelectedForAvg))
+        }
+    }
+
     // Budget Limits
     val budgetLimits: StateFlow<List<BudgetLimit>> = budgetLimitDao.getAllBudgetLimits()
         .flowOn(Dispatchers.IO)

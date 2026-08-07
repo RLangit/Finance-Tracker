@@ -229,7 +229,9 @@ fun DashboardScreen(
         transactions.filter { it.type == TransactionType.PEMASUKAN && it.category != "Tabungan" }.sumOf { it.amount }
     }
     val totalExpense = remember(transactions) {
-        transactions.filter { it.type == TransactionType.PENGELUARAN && it.category != "Tabungan" }.sumOf { it.amount }
+        val expense = transactions.filter { it.type == TransactionType.PENGELUARAN && it.category != "Tabungan" }.sumOf { it.amount }
+        val taxes = transactions.filter { it.type != TransactionType.PEMASUKAN }.sumOf { it.taxAmount }
+        expense + taxes
     }
     val currentBalance = remember(transactions) {
         val income = transactions.filter { it.type == TransactionType.PEMASUKAN }.sumOf { it.amount }

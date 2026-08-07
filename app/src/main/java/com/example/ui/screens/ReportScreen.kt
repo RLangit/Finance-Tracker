@@ -53,7 +53,16 @@ fun ReportScreen(
 
     var selectedTab by remember { mutableStateOf(ReportTab.PENGELUARAN) }
     var currentMonthOffset by remember { mutableStateOf(0) } // 0 = Current, -1 = Prev Month, etc.
+
+    // Average Spending States
+    var showAvgSettings by remember { mutableStateOf(false) }
     
+    // Key to refresh calculations when the day changes (e.g. at midnight or next app open)
+    val dateKey = remember(transactions) { 
+        val now = Calendar.getInstance()
+        "${now.get(Calendar.YEAR)}-${now.get(Calendar.DAY_OF_YEAR)}"
+    }
+
     fun getDynamicColor(category: String): Color {
         val mapped = metaItems.find { it.name == category }?.colorHex
         if (mapped != null) {
@@ -65,7 +74,7 @@ fun ReportScreen(
     }
 
     // Calculate dates based on month offset
-    val periodText = remember(currentMonthOffset) {
+    val periodText = remember(currentMonthOffset, dateKey) {
         val calendar = Calendar.getInstance()
         calendar.add(Calendar.MONTH, currentMonthOffset)
         
@@ -81,7 +90,7 @@ fun ReportScreen(
     }
 
     // Filter transactions by the chosen month range
-    val filteredTransactions = remember(transactions, currentMonthOffset) {
+    val filteredTransactions = remember(transactions, currentMonthOffset, dateKey) {
         val calendar = Calendar.getInstance()
         calendar.add(Calendar.MONTH, currentMonthOffset)
         
@@ -107,6 +116,39 @@ fun ReportScreen(
         allGoals.sumOf { it.currentAmount }
     }
     val selisihValue = monthlyPemasukan - monthlyPengeluaran
+
+    // Daily Average Logic
+    val elapsedDays = remember(currentMonthOffset, dateKey) {
+        val calendar = Calendar.getInstance()
+        val now = Calendar.getInstance()
+        
+        calendar.add(Calendar.MONTH, currentMonthOffset)
+        
+        val targetMonth = calendar.get(Calendar.MONTH)
+        val targetYear = calendar.get(Calendar.YEAR)
+        val currentMonth = now.get(Calendar.MONTH)
+        val currentYear = now.get(Calendar.YEAR)
+        
+        if (targetMonth == currentMonth && targetYear == currentYear) {
+            // Current month: use current day of month
+            now.get(Calendar.DAY_OF_MONTH)
+        } else if (calendar.before(now)) {
+            // Past month: use total days in that month
+            calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
+        } else {
+            // Future month: 1 (to avoid division by zero)
+            1
+        }
+    }
+    val avgDailyOverall = if (elapsedDays > 0) monthlyPengeluaran / elapsedDays else 0.0
+
+    val categoryAverages = remember(filteredTransactions, metaItems, elapsedDays) {
+        val selectedCats = metaItems.filter { it.isSelectedForAvg }.map { it.name }
+        selectedCats.map { cat ->
+            val total = filteredTransactions.filter { it.category == cat && it.type == TransactionType.PENGELUARAN }.sumOf { it.amount + it.taxAmount }
+            cat to (total / elapsedDays)
+        }
+    }
 
     // Calculate breakdown categories logic for the circular donut layout
     val categoryStats = remember(filteredTransactions, selectedTab) {
@@ -296,6 +338,71 @@ fun ReportScreen(
                                 income = monthlyPemasukan,
                                 expense = monthlyPengeluaran
                             )
+                        }
+
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = OutlineVariant)
+
+                        // Daily Average Section (Moved below the chart)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Rata-rata Pengeluaran Harian",
+                                color = Color.Gray,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            IconButton(
+                                onClick = { showAvgSettings = true },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "Avg Settings",
+                                    tint = GoPayBrightTeal,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Rp ${String.format("%,.0f", avgDailyOverall).replace(",", ".")}",
+                                color = Color.White,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+
+                            if (categoryAverages.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                categoryAverages.forEach { (cat, avg) ->
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(vertical = 2.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .clip(CircleShape)
+                                                .background(getDynamicColor(cat))
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "$cat: Rp ${String.format("%,.0f", avg).replace(",", ".")}",
+                                            color = Color.LightGray,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -536,6 +643,59 @@ fun ReportScreen(
                                 )
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showAvgSettings) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showAvgSettings = false }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = GoPayNavy)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Pilih Kategori Rata-rata",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
+                    LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
+                        items(metaItems.filter { it.type == com.example.data.ItemType.EXPENSE_CATEGORY }) { item ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        viewModel.toggleMetaItemAvgSelection(item)
+                                    }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = item.isSelectedForAvg,
+                                    onCheckedChange = null,
+                                    colors = CheckboxDefaults.colors(checkedColor = GoPayBrightTeal)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(item.name, color = Color.White, fontSize = 14.sp)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = { showAvgSettings = false },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = GoPayBrightTeal)
+                    ) {
+                        Text("Tutup", color = Color.White)
                     }
                 }
             }

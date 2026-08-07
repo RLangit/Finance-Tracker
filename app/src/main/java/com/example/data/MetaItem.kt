@@ -12,5 +12,6 @@ data class MetaItem(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val name: String,
     val type: ItemType,
-    val colorHex: String
+    val colorHex: String,
+    val isSelectedForAvg: Boolean = false
 )

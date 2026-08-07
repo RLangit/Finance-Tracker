@@ -24,4 +24,3 @@ google-services.json
 # Environment variables
 .env
 .env.*
-!.env.example

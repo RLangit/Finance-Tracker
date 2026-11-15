@@ -3,7 +3,7 @@ package com.example.data
 import android.content.Context
 import androidx.room.*
 
-@Database(entities = [Transaction::class, SavingsGoal::class, MetaItem::class, BudgetLimit::class], version = 8, exportSchema = false)
+@Database(entities = [Transaction::class, SavingsGoal::class, MetaItem::class, BudgetLimit::class], version = 9, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun transactionDao(): TransactionDao

@@ -13,5 +13,6 @@ data class MetaItem(
     val name: String,
     val type: ItemType,
     val colorHex: String,
-    val isSelectedForAvg: Boolean = false
+    val isSelectedForAvg: Boolean = false,
+    val displayOrder: Int = 0
 )

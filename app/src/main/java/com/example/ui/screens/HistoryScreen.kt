@@ -478,7 +478,7 @@ fun HistoryScreen(
                     }
 
                     items(list) { tx ->
-                        val catColor = remember(tx.category) { getCategoryColor(tx.category) }
+                        val catColor = remember(tx.category, metaItems) { viewModel.getDynamicColor(tx.category) }
                         val catIcon = remember(tx.category) { getCategoryIcon(tx.category) }
 
                         Row(

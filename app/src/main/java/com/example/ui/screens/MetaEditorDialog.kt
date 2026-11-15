@@ -10,6 +10,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -39,6 +41,7 @@ fun MetaEditorDialog(
 ) {
     var showAddEditDialog by remember { mutableStateOf<MetaItem?>(null) }
     var showAdd by remember { mutableStateOf(false) }
+    var itemToDelete by remember { mutableStateOf<MetaItem?>(null) }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -95,12 +98,19 @@ fun MetaEditorDialog(
                                 Text(item.name, color = Color.White, fontSize = 14.sp)
                             }
                             Row {
+                                IconButton(onClick = { viewModel.moveMetaItemUp(item) }, modifier = Modifier.size(24.dp)) {
+                                    Icon(androidx.compose.material.icons.Icons.Default.ArrowUpward, tint = Color.Gray, contentDescription = "Up", modifier = Modifier.size(16.dp))
+                                }
+                                IconButton(onClick = { viewModel.moveMetaItemDown(item) }, modifier = Modifier.size(24.dp)) {
+                                    Icon(androidx.compose.material.icons.Icons.Default.ArrowDownward, tint = Color.Gray, contentDescription = "Down", modifier = Modifier.size(16.dp))
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
                                 IconButton(onClick = { showAddEditDialog = item }, modifier = Modifier.size(24.dp)) {
                                     Icon(Icons.Default.Edit, tint = GoPayBrightTeal, contentDescription = "Edit")
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
                                 IconButton(
-                                    onClick = { viewModel.deleteMetaItem(item) }, 
+                                    onClick = { itemToDelete = item }, 
                                     modifier = Modifier.size(24.dp)
                                 ) {
                                     Icon(Icons.Default.Delete, tint = WondrCoralRed, contentDescription = "Delete")
@@ -143,6 +153,127 @@ fun MetaEditorDialog(
                 }
             }
         )
+    }
+
+    itemToDelete?.let { item ->
+        DeleteSyncDialog(
+            item = item,
+            allAvailableItems = items.filter { it.id != item.id },
+            onDismiss = { itemToDelete = null },
+            onDeleteOnly = {
+                viewModel.deleteMetaItem(item)
+                itemToDelete = null
+            },
+            onDeleteAndSync = { replacement ->
+                viewModel.deleteMetaItem(item, replacement.name)
+                itemToDelete = null
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DeleteSyncDialog(
+    item: MetaItem,
+    allAvailableItems: List<MetaItem>,
+    onDismiss: () -> Unit,
+    onDeleteOnly: () -> Unit,
+    onDeleteAndSync: (MetaItem) -> Unit
+) {
+    var selectedReplacement by remember { mutableStateOf<MetaItem?>(allAvailableItems.find { it.name == "Lainnya" } ?: allAvailableItems.firstOrNull()) }
+    var expanded by remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = GoPayNavy),
+            shape = RoundedCornerShape(24.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, OutlineVariant)
+        ) {
+            Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    text = "Hapus ${item.name}?",
+                    color = Color.White,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Text(
+                    text = "Terdapat data transaksi lama yang menggunakan '${item.name}'. Apa yang ingin Anda lakukan?",
+                    color = Color.Gray,
+                    fontSize = 14.sp
+                )
+
+                if (allAvailableItems.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Pindahkan data ke:", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        
+                        ExposedDropdownMenuBox(
+                            expanded = expanded,
+                            onExpandedChange = { expanded = !expanded }
+                        ) {
+                            OutlinedTextField(
+                                value = selectedReplacement?.name ?: "Pilih...",
+                                onValueChange = {},
+                                readOnly = true,
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                                modifier = Modifier.fillMaxWidth().menuAnchor(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedContainerColor = GoPayDarkBlue,
+                                    unfocusedContainerColor = GoPayDarkBlue,
+                                    focusedBorderColor = GoPayBrightTeal,
+                                    unfocusedBorderColor = OutlineVariant
+                                )
+                            )
+                            ExposedDropdownMenu(
+                                expanded = expanded,
+                                onDismissRequest = { expanded = false },
+                                modifier = Modifier.background(GoPayNavy)
+                            ) {
+                                allAvailableItems.forEach { replacement ->
+                                    DropdownMenuItem(
+                                        text = { Text(replacement.name, color = Color.White) },
+                                        onClick = {
+                                            selectedReplacement = replacement
+                                            expanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Button(
+                        onClick = { selectedReplacement?.let { onDeleteAndSync(it) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = GoPayBrightTeal),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Hapus & Pindahkan Data", fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                TextButton(
+                    onClick = onDeleteOnly,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.textButtonColors(contentColor = WondrCoralRed)
+                ) {
+                    Text("Hapus Saja (Data jadi 'Ghost')")
+                }
+
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.textButtonColors(contentColor = Color.Gray)
+                ) {
+                    Text("Batal")
+                }
+            }
+        }
     }
 }
 

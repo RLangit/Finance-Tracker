@@ -29,6 +29,14 @@ class TransactionRepository(private val transactionDao: TransactionDao) {
         return transactionDao.getDistinctPaymentMethods()
     }
 
+    suspend fun updatePaymentMethodName(oldName: String, newName: String) {
+        transactionDao.updatePaymentMethodName(oldName, newName)
+    }
+
+    suspend fun updateCategoryName(oldName: String, newName: String) {
+        transactionDao.updateCategoryName(oldName, newName)
+    }
+
     suspend fun deleteAll() {
         transactionDao.deleteAllTransactions()
     }

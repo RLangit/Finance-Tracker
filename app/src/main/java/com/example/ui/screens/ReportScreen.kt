@@ -552,7 +552,7 @@ fun ReportScreen(
                                         .size(200.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    DonutChart(items = categoryStats, colorProvider = ::getDynamicColor)
+                                    DonutChart(items = categoryStats, colorProvider = { viewModel.getDynamicColor(it) })
 
                                     // Center Label
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -581,7 +581,7 @@ fun ReportScreen(
                     }
 
                     items(categoryStats) { stat ->
-                        val color = remember(stat.category, metaItems) { getDynamicColor(stat.category) }
+                        val color = remember(stat.category, metaItems) { viewModel.getDynamicColor(stat.category) }
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()

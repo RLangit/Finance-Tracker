@@ -19,4 +19,7 @@ interface BudgetLimitDao {
     
     @Query("SELECT * FROM budget_limits WHERE methodName = :methodName LIMIT 1")
     suspend fun getLimitByMethod(methodName: String): BudgetLimit?
+
+    @Query("UPDATE budget_limits SET methodName = :newName WHERE methodName = :oldName")
+    suspend fun updateMethodName(oldName: String, newName: String)
 }

@@ -430,7 +430,7 @@ fun ProfileScreen(
     showMetaEditor?.let { itemType ->
         MetaEditorDialog(
             itemType = itemType,
-            items = metaItems.filter { it.type == itemType },
+            items = metaItems.filter { it.type == itemType }.sortedBy { it.displayOrder },
             onDismiss = { showMetaEditor = null },
             viewModel = viewModel
         )

@@ -24,3 +24,8 @@ google-services.json
 # Environment variables
 .env
 .env.*
+
+# Temp logs and agent artifacts
+*.log
+.artifacts/
+

@@ -26,6 +26,12 @@ interface TransactionDao {
     @Query("SELECT DISTINCT paymentMethod FROM transactions")
     fun getDistinctPaymentMethods(): Flow<List<String>>
 
+    @Query("UPDATE transactions SET paymentMethod = :newName WHERE paymentMethod = :oldName")
+    suspend fun updatePaymentMethodName(oldName: String, newName: String)
+
+    @Query("UPDATE transactions SET category = :newName WHERE category = :oldName")
+    suspend fun updateCategoryName(oldName: String, newName: String)
+
     @Query("DELETE FROM transactions")
     suspend fun deleteAllTransactions()
 }

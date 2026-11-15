@@ -8,14 +8,10 @@ Manage your money with ease using a sleek, modern, and intuitive financial compa
 Say goodbye to external calculator apps when logging transactions.
 - **In-Line Math Calculations**: Type basic arithmetic expressions (`+`, `-`, `*`, `x`, `:`, `/`, `()`) directly into the Nominal field (e.g., `24.000 - 7.000` or `1.500.000 : 3`).
 - **Live Result Preview**: Real-time evaluation displays the calculated total (e.g., `= Rp 17.000`) right below the input box as you type.
-- **Real-Time Thousands Separators**: Expressions automatically format number segments with thousands separators in real-time (e.g., `24.000 - 7.000`).
-- **Numeric Phone Keypad**: Nominal input automatically opens a dedicated numeric/phone keypad with numbers `0-9` and operators `+`, `-`, `*`, `/` for seamless typing.
 
-### 📌 Redesigned Recent Transaction Pinning
+### 📌 Recent Transaction Pinning
 Organize your recent transactions on the homepage with a cleaner, hold-to-pin interaction.
-- **Hold-to-Pin Confirmation**: Long-press any recent transaction in **Transaksi Terkini** to prompt a confirmation dialog before pinning or unpinning.
-- **Clean UI**: Unpinned transactions no longer display cluttered pin icons. Pinned transactions are highlighted with a prominent blue/teal pin symbol and float to the top of your list (up to 3 pinned items).
-- **Persistent Pin State**: Pins persist securely across app launches and clean up automatically if a pinned transaction is deleted.
+- You can now pin up to 3 of your recent transactions in case you want to keep track of it or edit it in the near future.
 
 ### 🎯 Flexible 'Tabungan' (Savings Goals) & Deposits
 Don't just save—save with a purpose. Create specific savings targets and track your progress in real-time.

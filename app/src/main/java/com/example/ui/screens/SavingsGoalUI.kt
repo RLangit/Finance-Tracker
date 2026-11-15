@@ -312,10 +312,14 @@ fun ManageGoalDialog(
     onMarkDone: () -> Unit,
     onMarkDoneAutomatically: (String, String) -> Unit,
     onEdit: (String, Double, String) -> Unit,
-    metaItems: List<com.example.data.MetaItem> = emptyList()
+    methodBalances: Map<String, Double> = emptyMap(),
+    metaItems: List<com.example.data.MetaItem> = emptyList(),
+    getDynamicColor: (String) -> androidx.compose.ui.graphics.Color = { androidx.compose.ui.graphics.Color.Gray }
 ) {
     var amountRaw by remember { mutableStateOf(0L) }
     var amountStr by remember { mutableStateOf("") }
+    var depositMode by remember { mutableStateOf(0) } // 0: Nominal (Rp), 1: Persentase (%)
+    var percentageStr by remember { mutableStateOf("") }
     val remaining = goal.targetAmount - goal.currentAmount
 
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -373,12 +377,17 @@ fun ManageGoalDialog(
                     onDismiss = { showDeleteConfirm = false }
                 )
             } else if (showExceedConfirm) {
+                val currentMethodBalance = (methodBalances[selectedSourceMethod] ?: 0.0).coerceAtLeast(0.0)
+                val percentageVal = percentageStr.toDoubleOrNull() ?: 0.0
+                val calculatedFromPct = (percentageVal / 100.0) * currentMethodBalance
+                val effectiveAmount = if (depositMode == 0) amountRaw.toDouble() else calculatedFromPct
+
                 CustomActionDialog(
                     title = "Tabungan Melebihi Target",
                     message = "Jumlah ini akan membuat tabungan melebihi target. Anda ingin lanjut memasukkan semuanya?",
                     confirmText = "Ya, Lanjut",
                     onConfirm = { 
-                        onTopUp(amountRaw.toDouble(), selectedSourceMethod)
+                        onTopUp(effectiveAmount, selectedSourceMethod)
                         showExceedConfirm = false
                     },
                     dismissText = "Pilihan Lain",
@@ -589,13 +598,13 @@ fun ManageGoalDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(modifier = Modifier.size(60.dp)) {
-                                DonutChart(items = goalMethodStats, colorProvider = ::getCategoryColor)
+                                DonutChart(items = goalMethodStats, colorProvider = getDynamicColor)
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 goalMethodStats.forEach { stat ->
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(getCategoryColor(stat.category)))
+                                        Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(getDynamicColor(stat.category)))
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
                                             text = "${stat.category}: Rp ${String.format("%,.0f", stat.amount).replace(",", ".")}",
@@ -645,26 +654,141 @@ fun ManageGoalDialog(
                             }
                         }
 
-                        CustomInputBox(
-                            value = amountStr,
-                            onValueChange = { input ->
-                                val cleanString = input.filter { it.isDigit() }
-                                val stripped = if (cleanString.startsWith("0") && cleanString.length > 1) cleanString.trimStart('0') else cleanString
-                                if (stripped.isNotEmpty()) {
-                                    val raw = stripped.toLongOrNull() ?: 0L
-                                    amountRaw = raw
-                                    amountStr = stripped
-                                } else {
-                                    amountRaw = 0L
-                                    amountStr = ""
+                        val currentMethodBalance = (methodBalances[selectedSourceMethod] ?: 0.0).coerceAtLeast(0.0)
+                        val percentageVal = percentageStr.toDoubleOrNull() ?: 0.0
+                        val calculatedFromPct = (percentageVal / 100.0) * currentMethodBalance
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = depositMode == 0,
+                                onClick = { depositMode = 0 },
+                                label = { Text("Nominal (Rp)", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = GoPayBrightTeal,
+                                    selectedLabelColor = Color.White,
+                                    containerColor = GoPayDarkBlue,
+                                    labelColor = Color.Gray
+                                ),
+                                modifier = Modifier.weight(1f)
+                            )
+                            FilterChip(
+                                selected = depositMode == 1,
+                                onClick = { depositMode = 1 },
+                                label = { Text("Persentase (%)", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = GoPayBrightTeal,
+                                    selectedLabelColor = Color.White,
+                                    containerColor = GoPayDarkBlue,
+                                    labelColor = Color.Gray
+                                ),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        if (depositMode == 0) {
+                            val hasGoalOp = remember(amountStr) { com.example.ui.ArithmeticEvaluator.containsOperator(amountStr) }
+                            val evalGoalVal = remember(amountStr) { com.example.ui.ArithmeticEvaluator.evaluate(amountStr) }
+
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                CustomInputBox(
+                                    value = amountStr,
+                                    onValueChange = { input ->
+                                        val filtered = input.filter { it.isDigit() || it in listOf('.', ',', '+', '-', '*', 'x', 'X', '×', ':', '/', '÷', '(', ')', ' ') }
+                                        amountStr = filtered
+                                        if (com.example.ui.ArithmeticEvaluator.containsOperator(filtered)) {
+                                            val eval = com.example.ui.ArithmeticEvaluator.evaluate(filtered)
+                                            if (eval != null && eval >= 0) {
+                                                amountRaw = eval.toLong()
+                                            }
+                                        } else {
+                                            val cleanString = filtered.filter { it.isDigit() }
+                                            val stripped = if (cleanString.startsWith("0") && cleanString.length > 1) cleanString.trimStart('0') else cleanString
+                                            if (stripped.isNotEmpty()) {
+                                                amountRaw = stripped.toLongOrNull() ?: 0L
+                                            } else {
+                                                amountRaw = 0L
+                                            }
+                                        }
+                                    },
+                                    label = "Nominal",
+                                    prefix = "Rp",
+                                    visualTransformation = com.example.ui.ExpressionThousandsSeparatorVisualTransformation(),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                if (hasGoalOp) {
+                                    if (evalGoalVal != null && evalGoalVal >= 0) {
+                                        Text(
+                                            text = "Hasil: Rp ${com.example.ui.ArithmeticEvaluator.formatResult(evalGoalVal)}",
+                                            color = GoPayBrightTeal,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            modifier = Modifier.padding(start = 4.dp)
+                                        )
+                                    } else {
+                                        Text(
+                                            text = "Format kalkulasi belum lengkap",
+                                            color = Color.Gray,
+                                            fontSize = 11.sp,
+                                            modifier = Modifier.padding(start = 4.dp)
+                                        )
+                                    }
                                 }
-                            },
-                            label = "Nominal",
-                            prefix = "Rp",
-                            visualTransformation = com.example.ui.ThousandsSeparatorVisualTransformation(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                            }
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                CustomInputBox(
+                                    value = percentageStr,
+                                    onValueChange = { input ->
+                                        val clean = input.filter { it.isDigit() || it == '.' }
+                                        val num = clean.toDoubleOrNull()
+                                        if (clean.isEmpty() || (num != null && num <= 100.0)) {
+                                            percentageStr = clean
+                                        }
+                                    },
+                                    label = "Persentase (%) dari $selectedSourceMethod",
+                                    prefix = "%",
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    listOf(10, 25, 50, 75, 100).forEach { pct ->
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(if (percentageStr == pct.toString()) GoPayBrightTeal else Color.White.copy(alpha = 0.1f))
+                                                .clickable { percentageStr = pct.toString() }
+                                                .padding(vertical = 6.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "$pct%",
+                                                color = Color.White,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Text(
+                                    text = "Saldo $selectedSourceMethod: Rp ${String.format("%,.0f", currentMethodBalance).replace(",", ".")}" +
+                                            if (percentageVal > 0) " → Nominal: Rp ${String.format("%,.0f", calculatedFromPct).replace(",", ".")}" else "",
+                                    color = GoPayBrightTeal,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
                     }
 
                     if (remaining <= 0) {
@@ -692,11 +816,20 @@ fun ManageGoalDialog(
                             Text("Hapus", color = WondrCoralRed, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                         
-                        val canWithdraw = amountRaw > 0 && (goal.sourceBalances[selectedSourceMethod] ?: 0.0) >= amountRaw.toDouble()
+                        val currentEffectiveAmount = if (depositMode == 0) {
+                            if (com.example.ui.ArithmeticEvaluator.containsOperator(amountStr)) {
+                                com.example.ui.ArithmeticEvaluator.evaluate(amountStr) ?: amountRaw.toDouble()
+                            } else {
+                                amountRaw.toDouble()
+                            }
+                        } else {
+                            ((percentageStr.toDoubleOrNull() ?: 0.0) / 100.0) * ((methodBalances[selectedSourceMethod] ?: 0.0).coerceAtLeast(0.0))
+                        }
+                        val canWithdraw = currentEffectiveAmount > 0 && (goal.sourceBalances[selectedSourceMethod] ?: 0.0) >= currentEffectiveAmount
 
                         Button(
                             onClick = {
-                                if (canWithdraw) onWithdraw(amountRaw.toDouble(), selectedSourceMethod)
+                                if (canWithdraw) onWithdraw(currentEffectiveAmount, selectedSourceMethod)
                             },
                             modifier = Modifier.weight(1.1f),
                             colors = ButtonDefaults.buttonColors(containerColor = GoPayDarkBlue),
@@ -709,7 +842,7 @@ fun ManageGoalDialog(
                         if (remaining > 0) {
                             Button(
                                 onClick = {
-                                    val topupAmt = amountRaw.toDouble()
+                                    val topupAmt = currentEffectiveAmount
                                     if (topupAmt > remaining && remaining > 0) {
                                         showExceedConfirm = true
                                     } else {
@@ -719,7 +852,7 @@ fun ManageGoalDialog(
                                 modifier = Modifier.weight(1.1f),
                                 colors = ButtonDefaults.buttonColors(containerColor = GoPayBrightTeal),
                                 shape = RoundedCornerShape(8.dp),
-                                enabled = amountRaw > 0,
+                                enabled = currentEffectiveAmount > 0,
                                 contentPadding = PaddingValues(0.dp)
                             ) {
                                 Text("Top Up", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)

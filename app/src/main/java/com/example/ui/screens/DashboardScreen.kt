@@ -3,12 +3,17 @@ package com.example.ui.screens
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import com.example.ui.ArithmeticEvaluator
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -50,6 +55,7 @@ fun CustomInputBox(
     onValueChange: (String) -> Unit,
     label: String,
     prefix: String = "",
+    suffix: String = "",
     visualTransformation: VisualTransformation = VisualTransformation.None,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     readOnly: Boolean = false,
@@ -74,6 +80,9 @@ fun CustomInputBox(
             shape = RoundedCornerShape(12.dp),
             prefix = if (prefix.isNotEmpty()) {
                 { Text(prefix, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 4.dp)) }
+            } else null,
+            suffix = if (suffix.isNotEmpty()) {
+                { Text(suffix, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 4.dp)) }
             } else null,
             colors = TextFieldDefaults.colors(
                 focusedTextColor = Color.White,
@@ -183,19 +192,21 @@ fun CustomActionDialog(
     }
 }
 
-@OptIn(ExperimentalAnimationApi::class)
+@OptIn(ExperimentalAnimationApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun DashboardScreen(
     viewModel: BudgetViewModel,
     modifier: Modifier = Modifier
 ) {
     val transactions by viewModel.allTransactions.collectAsState()
+    val pinnedTransactionIds by viewModel.pinnedTransactionIds.collectAsState()
     val isBalanceVisible by viewModel.isBalanceVisible
 
     var showAddDialog by remember { mutableStateOf(false) }
     var dialogType by remember { mutableStateOf(TransactionType.PENGELUARAN) }
 
     var editingTransaction by remember { mutableStateOf<Transaction?>(null) }
+    var transactionToPinConfirm by remember { mutableStateOf<Transaction?>(null) }
 
     // Savings Goals
     val allGoals by viewModel.allSavingsGoals.collectAsState()
@@ -243,8 +254,6 @@ fun DashboardScreen(
     val allTimeMethodStats = remember(transactions) {
         val methodTotals = mutableMapOf<String, Double>()
         transactions.forEach { tx ->
-            if (tx.category == "Tabungan") return@forEach
-            
             if (tx.type == TransactionType.TRANSFER) {
                 // source account: reduce by amount + tax
                 val outCurrent = methodTotals[tx.paymentMethod] ?: 0.0
@@ -277,8 +286,6 @@ fun DashboardScreen(
     val methodBalances = remember(transactions) {
         val balances = mutableMapOf<String, Double>()
         transactions.forEach { tx ->
-            if (tx.category == "Tabungan") return@forEach
-            
             if (tx.type == TransactionType.TRANSFER) {
                 // Source: reduce by amount + tax
                 val outCurrent = balances[tx.paymentMethod] ?: 0.0
@@ -298,6 +305,11 @@ fun DashboardScreen(
         balances
     }
 
+    val recentTransactions = remember(transactions, pinnedTransactionIds) {
+        val (pinned, unpinned) = transactions.partition { it.id in pinnedTransactionIds }
+        (pinned + unpinned).take(8)
+    }
+    val notify = LocalNotification.current
     val df = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
     val listState = rememberLazyListState()
     val showSmallHeader by remember {
@@ -501,28 +513,50 @@ fun DashboardScreen(
                                     ) {
                                         // Pie Chart
                                         Box(modifier = Modifier.size(100.dp)) {
-                                            DonutChart(items = allTimeMethodStats, colorProvider = ::getCategoryColor)
+                                            DonutChart(items = allTimeMethodStats, colorProvider = { viewModel.getDynamicColor(it) })
                                         }
                                         
-                                        Spacer(modifier = Modifier.width(24.dp))
+                                        Spacer(modifier = Modifier.width(16.dp))
                                         
-                                        // Legend/Rincian
-                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            allTimeMethodStats.take(4).forEach { stat ->
-                                                val color = getCategoryColor(stat.category)
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(color))
-                                                    Spacer(modifier = Modifier.width(8.dp))
+                                        // Legend/Rincian - Now Horizontal Scrollable
+                                        Row(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .horizontalScroll(rememberScrollState())
+                                                .padding(vertical = 4.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            allTimeMethodStats.forEach { stat ->
+                                                val color = viewModel.getDynamicColor(stat.category)
+                                                Column(
+                                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                                    horizontalAlignment = Alignment.Start
+                                                ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(color))
+                                                        Spacer(modifier = Modifier.width(6.dp))
+                                                        Text(
+                                                            text = stat.category,
+                                                            color = Color.White.copy(alpha = 0.9f),
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            maxLines = 1
+                                                        )
+                                                    }
                                                     Text(
-                                                        text = "${stat.category} (${String.format("%.1f%%", stat.percentage)}): " + if (isBalanceVisible) "Rp ${String.format("%,.0f", stat.amount).replace(",", ".")}" else "Rp ••••••••",
-                                                        color = Color.White.copy(alpha = 0.8f),
-                                                        fontSize = 11.sp,
+                                                        text = if (isBalanceVisible) "Rp ${String.format("%,.0f", stat.amount).replace(",", ".")}" else "Rp •••",
+                                                        color = Color.White.copy(alpha = 0.6f),
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Medium
+                                                    )
+                                                    Text(
+                                                        text = String.format("%.1f%%", stat.percentage),
+                                                        color = GoPayBrightTeal,
+                                                        fontSize = 9.sp,
                                                         fontWeight = FontWeight.Bold
                                                     )
                                                 }
-                                            }
-                                            if (allTimeMethodStats.size > 4) {
-                                                Text("...", color = Color.Gray, fontSize = 11.sp)
                                             }
                                         }
                                     }
@@ -574,7 +608,7 @@ fun DashboardScreen(
                     )
                     if (transactions.isNotEmpty()) {
                         Text(
-                            text = "Tap item untuk edit/hapus",
+                            text = "Tap untuk edit • Tahan (hold) untuk pin",
                             color = Color.Gray,
                             fontSize = 12.sp
                         )
@@ -594,14 +628,17 @@ fun DashboardScreen(
                     )
                 }
             } else {
-                items(transactions.take(8)) { tx ->
+                items(recentTransactions, key = { it.id }) { tx ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(16.dp))
                             .border(1.dp, OutlineVariant.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
                             .background(GoPayNavy)
-                            .clickable { editingTransaction = tx }
+                            .combinedClickable(
+                                onClick = { editingTransaction = tx },
+                                onLongClick = { transactionToPinConfirm = tx }
+                            )
                             .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -639,14 +676,26 @@ fun DashboardScreen(
                             Spacer(modifier = Modifier.width(16.dp))
 
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = if (tx.notes.isNotBlank()) tx.notes else if (tx.type == TransactionType.TRANSFER) "Transfer dana ke ${tx.category}" else tx.category,
-                                    color = Color.White,
-                                    fontSize = 14.sp,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (tx.notes.isNotBlank()) tx.notes else if (tx.type == TransactionType.TRANSFER) "Transfer dana ke ${tx.category}" else tx.category,
+                                        color = Color.White,
+                                        fontSize = 14.sp,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
+                                    if (tx.id in pinnedTransactionIds) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Icon(
+                                            imageVector = Icons.Default.PushPin,
+                                            contentDescription = "Dipin",
+                                            tint = GoPayBrightTeal,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Box(
@@ -672,32 +721,30 @@ fun DashboardScreen(
                             }
                         }
 
-                        // Price tag
-                        Text(
-                            text = (when (tx.type) {
-                                TransactionType.PEMASUKAN -> "+"
-                                TransactionType.PENGELUARAN -> "-"
-                                TransactionType.TRANSFER -> "⇄ "
-                            }) + "Rp ${String.format("%,.0f", tx.amount).replace(",", ".")}",
-                            color = when (tx.type) {
-                                TransactionType.PEMASUKAN -> WondrEmeraldGreen
-                                TransactionType.TRANSFER -> GoPayBrightTeal
-                                else -> Color.White
-                            },
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            softWrap = false
-                        )
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = (when (tx.type) {
+                                    TransactionType.PEMASUKAN -> "+"
+                                    TransactionType.PENGELUARAN -> "-"
+                                    TransactionType.TRANSFER -> "⇄ "
+                                }) + "Rp ${String.format("%,.0f", tx.amount).replace(",", ".")}",
+                                color = when (tx.type) {
+                                    TransactionType.PEMASUKAN -> WondrEmeraldGreen
+                                    TransactionType.TRANSFER -> GoPayBrightTeal
+                                    else -> Color.White
+                                },
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
                     }
                 }
             }
         }
     }
-    }
 
-    val notify = LocalNotification.current
-    
     // Interactive Add Dialog Form
     if (showAddDialog) {
         AddEditTransactionDialog(
@@ -811,7 +858,9 @@ fun DashboardScreen(
     selectedGoalForTopup?.let { goal ->
         ManageGoalDialog(
             goal = goal,
+            methodBalances = methodBalances,
             metaItems = metaItems,
+            getDynamicColor = { viewModel.getDynamicColor(it) },
             onDismiss = { selectedGoalForTopup = null },
             onTopUp = { amount, source ->
                 viewModel.addFundsToGoal(goal, amount, source)
@@ -918,6 +967,36 @@ fun DashboardScreen(
             onDismiss = null
         )
     }
+
+    transactionToPinConfirm?.let { tx ->
+        val isPinned = tx.id in pinnedTransactionIds
+        val txTitle = if (tx.notes.isNotBlank()) tx.notes else if (tx.type == TransactionType.TRANSFER) "Transfer dana ke ${tx.category}" else tx.category
+        CustomActionDialog(
+            title = if (isPinned) "Lepas Pin Transaksi?" else "Pin Transaksi?",
+            message = if (isPinned) {
+                "Apakah Anda yakin ingin melepas pin dari transaksi '$txTitle'?"
+            } else {
+                "Apakah Anda yakin ingin menyematkan (pin) transaksi '$txTitle' ke paling atas?"
+            },
+            confirmText = if (isPinned) "Lepas Pin" else "Pin Transaksi",
+            confirmColor = if (isPinned) WondrCoralRed else GoPayBrightTeal,
+            onConfirm = {
+                if (isPinned) {
+                    viewModel.toggleTransactionPin(tx.id)
+                    notify?.invoke("Pin transaksi dilepas.")
+                } else {
+                    if (!viewModel.toggleTransactionPin(tx.id)) {
+                        notify?.invoke("Maksimal 3 transaksi dapat dipin.")
+                    } else {
+                        notify?.invoke("Transaksi dipin ke paling atas!")
+                    }
+                }
+                transactionToPinConfirm = null
+            },
+            onDismiss = { transactionToPinConfirm = null }
+        )
+    }
+}
 }
 
 @Composable
@@ -1001,6 +1080,7 @@ fun AddEditTransactionDialog(
     var selectedCategory by remember { mutableStateOf(if (initialCategory.isNotBlank()) initialCategory else "") }
     var taxAmountStr by remember { mutableStateOf(if (initialTaxAmount > 0) initialTaxAmount.toLong().toString() else "") }
     var hasTax by remember { mutableStateOf(initialTaxAmount > 0) }
+    var taxInputType by remember { mutableStateOf(0) } // 0: Nominal, 1: Percent
 
     var expandedMethod by remember { mutableStateOf(false) }
     var expandedCategory by remember { mutableStateOf(false) }
@@ -1117,28 +1197,57 @@ fun AddEditTransactionDialog(
                     }
                 }
 
-                // Nominal Amount Input Field
-                CustomInputBox(
-                    value = amountStr,
-                    onValueChange = { input ->
-                        val cleanString = input.filter { it.isDigit() }
-                        // optionally strip leading zeroes
-                        val stripped = if (cleanString.startsWith("0") && cleanString.length > 1) cleanString.trimStart('0') else cleanString
-                        if (stripped.isNotEmpty()) {
-                            val raw = stripped.toLongOrNull() ?: 0L
-                            amountRaw = raw
-                            amountStr = stripped
+                // Nominal Amount Input Field with Arithmetic Evaluation & Phone/Numeric Keyboard
+                val hasOperator = remember(amountStr) { ArithmeticEvaluator.containsOperator(amountStr) }
+                val evaluatedValue = remember(amountStr) { ArithmeticEvaluator.evaluate(amountStr) }
+
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    CustomInputBox(
+                        value = amountStr,
+                        onValueChange = { input ->
+                            val filtered = input.filter { it.isDigit() || it in listOf('.', ',', '+', '-', '*', 'x', 'X', '×', ':', '/', '÷', '(', ')', ' ') }
+                            amountStr = filtered
+                            if (ArithmeticEvaluator.containsOperator(filtered)) {
+                                val eval = ArithmeticEvaluator.evaluate(filtered)
+                                if (eval != null && eval >= 0) {
+                                    amountRaw = eval.toLong()
+                                }
+                            } else {
+                                val cleanString = filtered.filter { it.isDigit() }
+                                val stripped = if (cleanString.startsWith("0") && cleanString.length > 1) cleanString.trimStart('0') else cleanString
+                                if (stripped.isNotEmpty()) {
+                                    amountRaw = stripped.toLongOrNull() ?: 0L
+                                } else {
+                                    amountRaw = 0L
+                                }
+                            }
+                        },
+                        label = "Nominal",
+                        prefix = "Rp",
+                        visualTransformation = com.example.ui.ExpressionThousandsSeparatorVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        modifier = Modifier.fillMaxWidth().testTag("amount_field")
+                    )
+
+                    if (hasOperator) {
+                        if (evaluatedValue != null && evaluatedValue >= 0) {
+                            Text(
+                                text = "Hasil: Rp ${ArithmeticEvaluator.formatResult(evaluatedValue)}",
+                                color = GoPayBrightTeal,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
                         } else {
-                            amountRaw = 0L
-                            amountStr = ""
+                            Text(
+                                text = "Format kalkulasi belum lengkap",
+                                color = Color.Gray,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
                         }
-                    },
-                    label = "Nominal",
-                    prefix = "Rp",
-                    visualTransformation = com.example.ui.ThousandsSeparatorVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth().testTag("amount_field")
-                )
+                    }
+                }
 
                 // Transaksi Jenis/Payment Method click selection row
                 ExposedDropdownMenuBox(
@@ -1208,8 +1317,8 @@ fun AddEditTransactionDialog(
                     modifier = Modifier.fillMaxWidth().testTag("notes_field")
                 )
 
-                // Tax Section for Transfer
-                if (type == TransactionType.TRANSFER) {
+                // Tax Section for Transfer and Expense
+                if (type == TransactionType.TRANSFER || type == TransactionType.PENGELUARAN) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(
@@ -1221,17 +1330,61 @@ fun AddEditTransactionDialog(
                         }
                         
                         if (hasTax) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(GoPayDarkBlue)
+                                    .padding(4.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (taxInputType == 0) GoPayBrightTeal else Color.Transparent)
+                                        .clickable { taxInputType = 0 }
+                                        .padding(vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("Nominal", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (taxInputType == 1) GoPayBrightTeal else Color.Transparent)
+                                        .clickable { taxInputType = 1 }
+                                        .padding(vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("Persen (%)", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
                             CustomInputBox(
                                 value = taxAmountStr,
                                 onValueChange = { input ->
-                                    if (input.all { it.isDigit() }) taxAmountStr = input
+                                    val clean = input.filter { it.isDigit() || (it == '.' && taxInputType == 1) }
+                                    taxAmountStr = clean
                                 },
-                                label = "Nominal Biaya Admin",
-                                prefix = "Rp",
-                                visualTransformation = com.example.ui.ThousandsSeparatorVisualTransformation(),
+                                label = if (taxInputType == 0) "Nominal Biaya Admin" else "Persentase Pajak (%)",
+                                prefix = if (taxInputType == 0) "Rp" else "",
+                                suffix = if (taxInputType == 1) "%" else "",
+                                visualTransformation = if (taxInputType == 0) com.example.ui.ThousandsSeparatorVisualTransformation() else VisualTransformation.None,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.fillMaxWidth()
                             )
+                            
+                            if (taxInputType == 1) {
+                                val pct = taxAmountStr.toDoubleOrNull() ?: 0.0
+                                val calculated = (pct / 100.0) * amountRaw.toDouble()
+                                Text(
+                                    text = "Setara: Rp ${String.format("%,.0f", calculated).replace(",", ".")}",
+                                    color = GoPayBrightTeal,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(start = 4.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -1269,8 +1422,20 @@ fun AddEditTransactionDialog(
 
                     Button(
                         onClick = {
-                            val amount = amountRaw.toDouble()
-                            val tax = if (hasTax) taxAmountStr.toDoubleOrNull() ?: 0.0 else 0.0
+                            val evalAmt = if (ArithmeticEvaluator.containsOperator(amountStr)) {
+                                ArithmeticEvaluator.evaluate(amountStr) ?: amountRaw.toDouble()
+                            } else {
+                                amountRaw.toDouble()
+                            }
+                            val amount = evalAmt
+                            val tax = if (hasTax) {
+                                if (taxInputType == 0) {
+                                    taxAmountStr.toDoubleOrNull() ?: 0.0
+                                } else {
+                                    val pct = taxAmountStr.toDoubleOrNull() ?: 0.0
+                                    (pct / 100.0) * amount
+                                }
+                            } else 0.0
                             if (amount > 0.0 && paymentMethod.isNotBlank() && selectedCategory.isNotBlank()) {
                                 if (type == TransactionType.TRANSFER && paymentMethod == selectedCategory) {
                                     android.widget.Toast.makeText(context, "Metode asal dan tujuan transfer tidak boleh sama", android.widget.Toast.LENGTH_SHORT).show()
@@ -1300,5 +1465,5 @@ fun AddEditTransactionDialog(
             } // end else
         } // end Card
     } // end Dialog
-} // end fun
-} // extra brace
+}  // end fun
+}

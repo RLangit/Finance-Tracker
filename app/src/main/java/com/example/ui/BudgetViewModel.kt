@@ -24,6 +24,17 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
     private val savingsRepository: SavingsGoalRepository
     private val metaItemDao: MetaItemDao
     private val budgetLimitDao: BudgetLimitDao
+    private val transactionPinPreferences = application.applicationContext.getSharedPreferences(
+        "transaction_pins",
+        Context.MODE_PRIVATE
+    )
+    private val _pinnedTransactionIds = MutableStateFlow(
+        transactionPinPreferences.getStringSet("pinned_transaction_ids", emptySet())
+            .orEmpty()
+            .mapNotNull(String::toLongOrNull)
+            .toSet()
+    )
+    val pinnedTransactionIds: StateFlow<Set<Long>> = _pinnedTransactionIds.asStateFlow()
 
     private val auth = FirebaseAuth.getInstance()
     private val firestore = FirebaseFirestore.getInstance()
@@ -56,7 +67,21 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
                     MetaItem(name = "GoPay", type = ItemType.METHOD, colorHex = "#00A5CF"),
                     MetaItem(name = "Lainnya", type = ItemType.METHOD, colorHex = "#9E9E9E")
                 )
-                defaults.forEach { metaItemDao.insertMetaItem(it) }
+                defaults.forEachIndexed { index, item ->
+                    metaItemDao.insertMetaItem(item.copy(displayOrder = index))
+                }
+            } else {
+                // Repair: If items exist but display orders are not initialized (all 0),
+                // perform a one-time re-indexing to enable reordering.
+                ItemType.entries.forEach { type ->
+                    val sameType = items.filter { it.type == type }
+                    if (sameType.isNotEmpty() && sameType.all { it.displayOrder == 0 }) {
+                        val reindexed = sameType.mapIndexed { index, meta -> 
+                            meta.copy(displayOrder = index) 
+                        }
+                        metaItemDao.updateAll(reindexed)
+                    }
+                }
             }
         }
     }
@@ -71,20 +96,123 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
 
     fun addMetaItem(name: String, type: ItemType, colorHex: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            metaItemDao.insertMetaItem(MetaItem(name = name, type = type, colorHex = colorHex))
+            val nextOrder = metaItems.value.filter { it.type == type }.size
+            metaItemDao.insertMetaItem(MetaItem(name = name, type = type, colorHex = colorHex, displayOrder = nextOrder))
         }
     }
 
     fun updateMetaItem(item: MetaItem) {
         viewModelScope.launch(Dispatchers.IO) {
+            val oldItem = metaItems.value.find { it.id == item.id }
+            if (oldItem != null && oldItem.name != item.name) {
+                // Name changed, propagate to transactions
+                when (item.type) {
+                    ItemType.METHOD -> {
+                        repository.updatePaymentMethodName(oldItem.name, item.name)
+                        // Also update Transfer destinations which are stored in 'category' field
+                        repository.updateCategoryName(oldItem.name, item.name)
+                        
+                        // Update Budget Limits
+                        budgetLimitDao.updateMethodName(oldItem.name, item.name)
+                        
+                        // Update Savings Goal source balances
+                        allSavingsGoals.value.forEach { goal ->
+                            if (goal.sourceBalances.containsKey(oldItem.name)) {
+                                val newBalances = goal.sourceBalances.toMutableMap()
+                                val amount = newBalances.remove(oldItem.name) ?: 0.0
+                                newBalances[item.name] = amount
+                                savingsRepository.update(goal.copy(sourceBalances = newBalances))
+                            }
+                        }
+                    }
+                    ItemType.INCOME_CATEGORY, ItemType.EXPENSE_CATEGORY -> repository.updateCategoryName(oldItem.name, item.name)
+                }
+            }
             metaItemDao.updateMetaItem(item)
         }
     }
 
-    fun deleteMetaItem(item: MetaItem) {
+    fun deleteMetaItem(item: MetaItem, replacementName: String? = null) {
         viewModelScope.launch(Dispatchers.IO) {
+            if (replacementName != null) {
+                // Propagate to transactions before deleting
+                when (item.type) {
+                    ItemType.METHOD -> {
+                        repository.updatePaymentMethodName(item.name, replacementName)
+                        repository.updateCategoryName(item.name, replacementName)
+                        
+                        // Update Budget Limits
+                        budgetLimitDao.updateMethodName(item.name, replacementName)
+                        
+                        // Update Savings Goal source balances
+                        allSavingsGoals.value.forEach { goal ->
+                            if (goal.sourceBalances.containsKey(item.name)) {
+                                val newBalances = goal.sourceBalances.toMutableMap()
+                                val amount = newBalances.remove(item.name) ?: 0.0
+                                val existing = newBalances[replacementName] ?: 0.0
+                                newBalances[replacementName] = existing + amount
+                                savingsRepository.update(goal.copy(sourceBalances = newBalances))
+                            }
+                        }
+                    }
+                    ItemType.INCOME_CATEGORY, ItemType.EXPENSE_CATEGORY -> repository.updateCategoryName(item.name, replacementName)
+                }
+            } else {
+                // If just deleting, also delete associated budget limit
+                if (item.type == ItemType.METHOD) {
+                    budgetLimitDao.getLimitByMethod(item.name)?.let {
+                        budgetLimitDao.deleteBudgetLimit(it)
+                    }
+                }
+            }
             metaItemDao.deleteMetaItem(item)
+            
+            // Re-order remaining items of the same type atomically using snapshot
+            val remaining = metaItemDao.getMetaItemsByTypeSnapshot(item.type)
+                .filter { it.id != item.id }
+                .mapIndexed { index, meta -> meta.copy(displayOrder = index) }
+            metaItemDao.updateAll(remaining)
         }
+    }
+
+    fun moveMetaItemUp(item: MetaItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            // Use snapshot for atomic accuracy
+            val sameType = metaItemDao.getMetaItemsByTypeSnapshot(item.type)
+            val index = sameType.indexOfFirst { it.id == item.id }
+            if (index > 0) {
+                val prev = sameType[index - 1]
+                val updatedItem = item.copy(displayOrder = prev.displayOrder)
+                val updatedPrev = prev.copy(displayOrder = item.displayOrder)
+                metaItemDao.updateMetaItem(updatedItem)
+                metaItemDao.updateMetaItem(updatedPrev)
+            }
+        }
+    }
+
+    fun moveMetaItemDown(item: MetaItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            // Use snapshot for atomic accuracy
+            val sameType = metaItemDao.getMetaItemsByTypeSnapshot(item.type)
+            val index = sameType.indexOfFirst { it.id == item.id }
+            if (index != -1 && index < sameType.size - 1) {
+                val next = sameType[index + 1]
+                val updatedItem = item.copy(displayOrder = next.displayOrder)
+                val updatedNext = next.copy(displayOrder = item.displayOrder)
+                metaItemDao.updateMetaItem(updatedItem)
+                metaItemDao.updateMetaItem(updatedNext)
+            }
+        }
+    }
+
+    fun getDynamicColor(category: String): androidx.compose.ui.graphics.Color {
+        val mapped = metaItems.value.find { it.name == category }?.colorHex
+        if (mapped != null) {
+            try {
+                return androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(mapped))
+            } catch (e: Exception) { }
+        }
+        return com.example.ui.screens.getCategoryColor(category)
     }
 
     fun toggleMetaItemAvgSelection(item: MetaItem) {
@@ -127,6 +255,31 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
         )
+
+    fun toggleTransactionPin(transactionId: Long): Boolean {
+        val currentPins = _pinnedTransactionIds.value
+        val updatedPins = when {
+            transactionId in currentPins -> currentPins - transactionId
+            currentPins.size < 3 -> currentPins + transactionId
+            else -> return false
+        }
+
+        _pinnedTransactionIds.value = updatedPins
+        transactionPinPreferences.edit()
+            .putStringSet("pinned_transaction_ids", updatedPins.map(Long::toString).toSet())
+            .apply()
+        return true
+    }
+
+    private fun unpinTransaction(transactionId: Long) {
+        if (transactionId !in _pinnedTransactionIds.value) return
+
+        val updatedPins = _pinnedTransactionIds.value - transactionId
+        _pinnedTransactionIds.value = updatedPins
+        transactionPinPreferences.edit()
+            .putStringSet("pinned_transaction_ids", updatedPins.map(Long::toString).toSet())
+            .apply()
+    }
 
     val allSavingsGoals: StateFlow<List<SavingsGoal>> = savingsRepository.allGoals
         .flowOn(Dispatchers.IO)
@@ -502,6 +655,7 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
             repository.deleteById(id)
+            unpinTransaction(id)
         }
     }
 
@@ -511,6 +665,10 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
                 // Delete locally
                 repository.deleteAll()
                 savingsRepository.deleteAll()
+                _pinnedTransactionIds.value = emptySet()
+                transactionPinPreferences.edit()
+                    .remove("pinned_transaction_ids")
+                    .apply()
                 
                 // Delete from cloud
                 deleteCloudData()
